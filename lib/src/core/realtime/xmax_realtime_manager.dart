@@ -97,33 +97,37 @@ final class XmaxRealtimeManager implements XmaxRealtimeManaging {
   Future<void>? _disconnectFuture;
 
   @override
-  RealtimeState get currentState => _state;
+  Future<RealtimeState> get currentState async => _state;
 
   @override
-  void setStateListener(RealtimeStateListener? listener) {
+  Future<void> setStateListener(RealtimeStateListener? listener) async {
     _stateListener = listener;
     listener?.call(_state);
   }
 
   @override
-  void setErrorListener(RealtimeErrorListener? listener) {
+  Future<void> setErrorListener(RealtimeErrorListener? listener) async {
     _errorHandler.setListener(listener);
   }
 
   @override
-  void setCameraPreviewReadyListener(
+  Future<void> setCameraPreviewReadyListener(
     RealtimeCameraPreviewReadyListener? listener,
-  ) {
+  ) async {
     _mediaController.setCameraPreviewReadyListener(listener);
   }
 
   @override
-  void setNetworkQualityListener(RealtimeNetworkQualityListener? listener) {
+  Future<void> setNetworkQualityListener(
+    RealtimeNetworkQualityListener? listener,
+  ) async {
     _streamController.setNetworkQualityListener(listener);
   }
 
   @override
-  void setPerformanceAlarmListener(RealtimePerformanceAlarmListener? listener) {
+  Future<void> setPerformanceAlarmListener(
+    RealtimePerformanceAlarmListener? listener,
+  ) async {
     _streamController.setPerformanceAlarmListener(listener);
   }
 
@@ -308,12 +312,16 @@ final class XmaxRealtimeManager implements XmaxRealtimeManaging {
         _state.connectionState == RealtimeConnectionState.disconnected) {
       return Future<void>.value();
     }
-    final future = _performDisconnect();
+    final future = _performDisconnect(
+      finalState: RealtimeConnectionState.disconnected,
+    );
     _disconnectFuture = future;
     return future.whenComplete(() => _disconnectFuture = null);
   }
 
-  Future<void> _performDisconnect() async {
+  Future<void> _performDisconnect({
+    required RealtimeConnectionState finalState,
+  }) async {
     _operationVersion += 1;
     final taskID = _state.taskID ?? '';
     _emit(
@@ -332,12 +340,7 @@ final class XmaxRealtimeManager implements XmaxRealtimeManaging {
     } catch (error) {
       _report(error);
     }
-    _emit(
-      RealtimeState(
-        connectionState: RealtimeConnectionState.disconnected,
-        sessionID: sessionID,
-      ),
-    );
+    _emit(RealtimeState(connectionState: finalState, sessionID: sessionID));
   }
 
   @override
@@ -477,13 +480,7 @@ final class XmaxRealtimeManager implements XmaxRealtimeManaging {
       return;
     }
     _report(error);
-    await disconnect();
-    _emit(
-      RealtimeState(
-        connectionState: RealtimeConnectionState.error,
-        sessionID: sessionID,
-      ),
-    );
+    await _performDisconnect(finalState: RealtimeConnectionState.error);
   }
 
   void _emit(RealtimeState state) {

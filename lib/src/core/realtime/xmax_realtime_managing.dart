@@ -11,15 +11,19 @@ import 'realtime_configuration.dart';
 
 abstract interface class XmaxRealtimeManaging {
   RealtimeConfiguration get options;
-  RealtimeState get currentState;
+  Future<RealtimeState> get currentState;
 
-  void setStateListener(RealtimeStateListener? listener);
-  void setErrorListener(RealtimeErrorListener? listener);
-  void setCameraPreviewReadyListener(
+  Future<void> setStateListener(RealtimeStateListener? listener);
+  Future<void> setErrorListener(RealtimeErrorListener? listener);
+  Future<void> setCameraPreviewReadyListener(
     RealtimeCameraPreviewReadyListener? listener,
   );
-  void setNetworkQualityListener(RealtimeNetworkQualityListener? listener);
-  void setPerformanceAlarmListener(RealtimePerformanceAlarmListener? listener);
+  Future<void> setNetworkQualityListener(
+    RealtimeNetworkQualityListener? listener,
+  );
+  Future<void> setPerformanceAlarmListener(
+    RealtimePerformanceAlarmListener? listener,
+  );
   Future<void> setLocalAudioVolume(double volume);
   Future<void> setRemoteAudioVolume(double volume);
   Future<RealtimeMediaStream> createLocalCameraStream({

@@ -81,10 +81,10 @@ final class XmaxRealtimeConnectionManager {
       _ensureCurrent(isCurrent);
       return createRealtimeMediaStream(id: 'stream-remote', videoTrack: track);
     } catch (error) {
-      if (isCurrent()) {
+      if (isCurrent() || activated) {
         await _rollbackConnection();
       }
-      if (session != null && !activated) {
+      if (session != null) {
         try {
           await _sessionService.closeSession(sessionID: session.id);
         } catch (_) {}
