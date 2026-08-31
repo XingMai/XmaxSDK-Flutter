@@ -10,6 +10,7 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  permission_handler: 13.0.1
   tencentcloud_cos_sdk_plugin_nobeacon: 1.2.9
   volc_engine_rtc: 3.60.6
 

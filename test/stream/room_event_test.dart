@@ -1,0 +1,69 @@
+import 'dart:convert';
+
+import 'package:flutter_test/flutter_test.dart';
+import 'package:xmax_sdk/src/service/realtime/realtime_context.dart';
+import 'package:xmax_sdk/src/service/realtime/realtime_point.dart';
+import 'package:xmax_sdk/src/service/realtime/realtime_video_format.dart';
+import 'package:xmax_sdk/src/stream/room/room_event.dart';
+
+void main() {
+  const format = RealtimeVideoFormat(width: 1024, height: 576, fps: 30);
+
+  test('start event matches iOS room signaling contract', () {
+    final event = jsonDecode(
+      RoomEvent.start(
+        userID: 'user-1',
+        taskID: 'task-1',
+        videoFormat: format,
+        context: RealtimeContext(
+          prompt: 'turn it into ink',
+          referencePath: 'cos/ref.png',
+        ),
+      ),
+    );
+
+    expect(event, <String, Object?>{
+      'event': 'start',
+      'params': <String, Object?>{
+        'model': 'default',
+        'size': <int>[1024, 576],
+        'prompt': 'turn it into ink',
+        'ref_image_path': 'cos/ref.png',
+      },
+      'user_id': 'user-1',
+      'uid': 'task-1',
+    });
+  });
+
+  test('tracks, stop, and heartbeat events match iOS keys', () {
+    expect(
+      jsonDecode(
+        RoomEvent.tracks(
+          userID: 'user-1',
+          taskID: 'task-1',
+          points: const <RealtimePoint>[
+            RealtimePoint(x: 10, y: 20),
+            RealtimePoint(x: 30, y: 40),
+          ],
+        ),
+      ),
+      <String, Object?>{
+        'event': 'tracks',
+        'tracks': <List<double>>[
+          <double>[10, 20],
+          <double>[30, 40],
+        ],
+        'user_id': 'user-1',
+        'uid': 'task-1',
+      },
+    );
+    expect(
+      jsonDecode(RoomEvent.stop(userID: 'user-1', taskID: 'task-1')),
+      <String, Object?>{'event': 'stop', 'user_id': 'user-1', 'uid': 'task-1'},
+    );
+    expect(jsonDecode(RoomEvent.heartbeat(userID: 'user-1')), <String, Object?>{
+      'event': 'heartbeat',
+      'user_id': 'user-1',
+    });
+  });
+}
