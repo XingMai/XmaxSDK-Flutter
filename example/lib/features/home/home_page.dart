@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:xmax_sdk/xmax_sdk.dart';
 
 import '../../ui/xlab_theme.dart';
@@ -17,6 +18,9 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   static const _apiKeyStorageKey = 'xlab.realtime.apiKey';
+  static final _apiKeyApplicationURL = Uri.parse(
+    'https://platform.xmaxai.com/api-keys',
+  );
   final _apiKeyController = TextEditingController();
   final _preferences = SharedPreferencesAsync();
   bool _obscureApiKey = true;
@@ -28,8 +32,30 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> _loadAPIKey() async {
-    _apiKeyController.text =
-        await _preferences.getString(_apiKeyStorageKey) ?? '';
+    final apiKey = await _preferences.getString(_apiKeyStorageKey) ?? '';
+    if (!mounted) {
+      return;
+    }
+    _apiKeyController.text = apiKey;
+  }
+
+  Future<void> _openAPIKeyApplicationPage() async {
+    try {
+      final opened = await launchUrl(
+        _apiKeyApplicationURL,
+        mode: LaunchMode.externalApplication,
+      );
+      if (opened || !mounted) {
+        return;
+      }
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+    }
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('无法打开 Xmax 开放平台')));
   }
 
   @override
@@ -247,39 +273,89 @@ class _HomePageState extends State<HomePage> {
                 ),
               ),
               const SizedBox(height: 8),
-              TextField(
-                controller: _apiKeyController,
-                obscureText: _obscureApiKey,
-                autocorrect: false,
-                enableSuggestions: false,
-                onChanged: (value) =>
-                    unawaited(_preferences.setString(_apiKeyStorageKey, value)),
-                style: const TextStyle(fontSize: 12),
-                decoration: InputDecoration(
-                  hintText: '输入 Xmax API Key',
-                  isDense: true,
-                  filled: true,
-                  fillColor: const Color(0x66080C12),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                    borderSide: const BorderSide(color: Color(0x1CFFFFFF)),
+              SizedBox(
+                height: 40,
+                child: TextField(
+                  key: const ValueKey<String>('api-key-field'),
+                  controller: _apiKeyController,
+                  obscureText: _obscureApiKey,
+                  autocorrect: false,
+                  enableSuggestions: false,
+                  onChanged: (value) => unawaited(
+                    _preferences.setString(_apiKeyStorageKey, value),
                   ),
-                  suffixIcon: IconButton(
-                    onPressed: () =>
-                        setState(() => _obscureApiKey = !_obscureApiKey),
-                    icon: Icon(
-                      _obscureApiKey
-                          ? Icons.visibility_outlined
-                          : Icons.visibility_off_outlined,
-                      size: 19,
+                  cursorColor: XLabPalette.mint,
+                  style: const TextStyle(
+                    color: Color(0xFFD6DEE9),
+                    fontSize: 12,
+                  ),
+                  decoration: InputDecoration(
+                    hintText: '输入 Xmax API Key',
+                    hintStyle: const TextStyle(
+                      color: Color(0x80607080),
+                      fontSize: 12,
+                    ),
+                    isDense: true,
+                    filled: true,
+                    fillColor: const Color(0x66080C12),
+                    contentPadding: const EdgeInsets.only(left: 12),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: const BorderSide(color: Color(0x1CFFFFFF)),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: const BorderSide(color: Color(0x1CFFFFFF)),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: const BorderSide(color: Color(0x1CFFFFFF)),
+                    ),
+                    suffixIconConstraints: const BoxConstraints.tightFor(
+                      width: 40,
+                      height: 40,
+                    ),
+                    suffixIcon: IconButton(
+                      padding: EdgeInsets.zero,
+                      onPressed: () =>
+                          setState(() => _obscureApiKey = !_obscureApiKey),
+                      icon: Icon(
+                        _obscureApiKey
+                            ? Icons.visibility_outlined
+                            : Icons.visibility_off_outlined,
+                        color: const Color(0xC7D6DEE9),
+                        size: 19,
+                      ),
                     ),
                   ),
                 ),
               ),
-              const SizedBox(height: 8),
-              const Text(
-                '还没有 API Key？前往 Xmax 开放平台申请',
-                style: TextStyle(color: Color(0x88708090), fontSize: 9),
+              const SizedBox(height: 7),
+              Row(
+                children: <Widget>[
+                  const Text(
+                    '还没有 API Key？',
+                    style: TextStyle(color: Color(0x99708090), fontSize: 9),
+                  ),
+                  const SizedBox(width: 4),
+                  Flexible(
+                    child: TextButton(
+                      key: const ValueKey<String>('api-key-platform-link'),
+                      onPressed: _openAPIKeyApplicationPage,
+                      style: TextButton.styleFrom(
+                        foregroundColor: XLabPalette.mint.withValues(
+                          alpha: 0.63,
+                        ),
+                        padding: EdgeInsets.zero,
+                        minimumSize: Size.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        visualDensity: VisualDensity.compact,
+                        textStyle: const TextStyle(fontSize: 9),
+                      ),
+                      child: const Text('前往 Xmax 开放平台申请'),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),

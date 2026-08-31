@@ -1,14 +1,50 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:shared_preferences_platform_interface/in_memory_shared_preferences_async.dart';
+import 'package:shared_preferences_platform_interface/shared_preferences_async_platform_interface.dart';
 import 'package:xmax_sdk_example/app.dart';
 
 void main() {
   testWidgets('shows the supported capability entry points', (tester) async {
+    SharedPreferencesAsyncPlatform.instance =
+        InMemorySharedPreferencesAsync.withData(<String, Object>{
+          'xlab.realtime.apiKey': 'cached-api-key',
+        });
+    addTearDown(() => SharedPreferencesAsyncPlatform.instance = null);
     await tester.pumpWidget(const XmaxSdkExampleApp());
+    await tester.pumpAndSettle();
 
-    expect(find.text('XmaxSDK'), findsOneWidget);
-    expect(find.textContaining('Flutter 1.0.0'), findsOneWidget);
-    expect(find.textContaining('摄像头实时流'), findsOneWidget);
-    expect(find.textContaining('自定义轨迹渲染'), findsOneWidget);
-    expect(find.textContaining('存储服务'), findsOneWidget);
+    expect(find.text('XMAXSDK'), findsOneWidget);
+    expect(find.text('v1.0.0'), findsOneWidget);
+    final apiKeyField = tester.widget<TextField>(
+      find.byKey(const ValueKey<String>('api-key-field')),
+    );
+    expect(apiKeyField.controller?.text, 'cached-api-key');
+    expect(find.text('前往 Xmax 开放平台申请'), findsOneWidget);
+
+    await tester.enterText(
+      find.byKey(const ValueKey<String>('api-key-field')),
+      'updated-api-key',
+    );
+    await tester.pumpAndSettle();
+    expect(
+      await SharedPreferencesAsync().getString('xlab.realtime.apiKey'),
+      'updated-api-key',
+    );
+
+    await tester.scrollUntilVisible(
+      find.text('摄像头实时流'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(find.text('摄像头实时流'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.text('存储服务'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(find.text('自定义轨迹渲染'), findsOneWidget);
+    expect(find.text('存储服务'), findsOneWidget);
   });
 }
