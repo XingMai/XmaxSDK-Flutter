@@ -228,7 +228,7 @@ final class XLabRealtimeControlPanel extends StatelessWidget {
     color: const Color(0xFF101010),
     child: SafeArea(
       top: false,
-      minimum: const EdgeInsets.only(bottom: 10),
+      minimum: const EdgeInsets.only(bottom: 16),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[
@@ -246,7 +246,7 @@ final class XLabRealtimeControlPanel extends StatelessWidget {
                     onPressed: generating && !busy ? onStop : null,
                     icon: Icon(
                       Icons.block,
-                      size: 20,
+                      size: 16,
                       color: Colors.white.withValues(
                         alpha: generating ? 1 : 0.5,
                       ),
@@ -259,24 +259,27 @@ final class XLabRealtimeControlPanel extends StatelessWidget {
                     scrollDirection: Axis.horizontal,
                     padding: const EdgeInsets.only(right: 14),
                     itemCount: XLabRealtimePanelMode.values.length,
-                    separatorBuilder: (_, _) => const SizedBox(width: 14),
+                    separatorBuilder: (_, _) => const SizedBox(width: 16),
                     itemBuilder: (context, index) {
                       final item = XLabRealtimePanelMode.values[index];
                       final selected = item == mode;
                       return GestureDetector(
                         behavior: HitTestBehavior.opaque,
                         onTap: busy ? null : () => onModeChanged(item),
-                        child: Center(
-                          child: Text(
-                            item.label,
-                            style: TextStyle(
-                              color: Colors.white.withValues(
-                                alpha: selected ? 1 : 0.48,
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 4),
+                          child: Center(
+                            child: Text(
+                              item.label,
+                              style: TextStyle(
+                                color: Colors.white.withValues(
+                                  alpha: selected ? 1 : 0.48,
+                                ),
+                                fontSize: 12,
+                                fontWeight: selected
+                                    ? FontWeight.w600
+                                    : FontWeight.w400,
                               ),
-                              fontSize: 13,
-                              fontWeight: selected
-                                  ? FontWeight.w600
-                                  : FontWeight.w400,
                             ),
                           ),
                         ),
@@ -406,7 +409,7 @@ final class _ReferenceStrip extends StatelessWidget {
   @override
   Widget build(BuildContext context) => ListView.separated(
     scrollDirection: Axis.horizontal,
-    padding: const EdgeInsets.only(left: 14, right: 14),
+    padding: const EdgeInsets.only(left: 14, right: 14, bottom: 6),
     itemCount: references.length + 1,
     separatorBuilder: (_, _) => const SizedBox(width: 10),
     itemBuilder: (context, index) {
@@ -421,17 +424,17 @@ final class _ReferenceStrip extends StatelessWidget {
       return GestureDetector(
         onTap: () => onReferenceChanged(selected ? null : reference),
         child: Container(
-          width: 50,
-          height: 50,
+          width: 44,
+          height: 44,
           padding: EdgeInsets.all(selected ? 2 : 0),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(11),
             border: selected
                 ? Border.all(color: const Color(0xFFFF2E88), width: 2)
                 : null,
           ),
           child: ClipRRect(
-            borderRadius: BorderRadius.circular(selected ? 8 : 10),
+            borderRadius: BorderRadius.circular(selected ? 7 : 9),
             child: _ReferenceImage(reference: reference),
           ),
         ),
@@ -450,15 +453,15 @@ final class _AddReferenceButton extends StatelessWidget {
   Widget build(BuildContext context) => GestureDetector(
     onTap: onPressed,
     child: Container(
-      width: 50,
-      height: 50,
+      width: 44,
+      height: 44,
       decoration: BoxDecoration(
         color: const Color(0xFF303032),
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(9),
       ),
       child: uploading
           ? const Padding(
-              padding: EdgeInsets.all(15),
+              padding: EdgeInsets.all(13),
               child: CircularProgressIndicator(
                 strokeWidth: 2,
                 color: Colors.white,
@@ -467,7 +470,7 @@ final class _AddReferenceButton extends StatelessWidget {
           : const Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: <Widget>[
-                Icon(Icons.add, color: Colors.white, size: 22),
+                Icon(Icons.add, color: Colors.white, size: 19),
                 Text('参考图', style: TextStyle(color: Colors.white, fontSize: 9)),
               ],
             ),
@@ -488,8 +491,8 @@ final class _ReferenceImage extends StatelessWidget {
     final image = bytes != null
         ? Image.memory(
             bytes,
-            width: radius == null ? 50 : radius! * 2,
-            height: radius == null ? 50 : radius! * 2,
+            width: radius == null ? 44 : radius! * 2,
+            height: radius == null ? 44 : radius! * 2,
             fit: BoxFit.cover,
           )
         : url == null
@@ -499,8 +502,8 @@ final class _ReferenceImage extends StatelessWidget {
           )
         : Image.network(
             url,
-            width: radius == null ? 50 : radius! * 2,
-            height: radius == null ? 50 : radius! * 2,
+            width: radius == null ? 44 : radius! * 2,
+            height: radius == null ? 44 : radius! * 2,
             fit: BoxFit.cover,
             errorBuilder: (_, _, _) => const ColoredBox(
               color: Color(0xFF303032),
