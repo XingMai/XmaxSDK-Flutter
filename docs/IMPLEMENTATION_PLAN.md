@@ -13,8 +13,8 @@
 基准源码：
 
 - `../../iOS/XmaxSDK/Sources/XmaxSDK`
-- iOS SDK 版本：`1.0.1`
-- Flutter 摄像头版版本：`1.0.1`
+- iOS SDK 版本：`1.0.0`
+- Flutter 摄像头版版本：`1.0.0`
 
 ## 2. 已确认决策
 

@@ -52,7 +52,7 @@ Flutter：
 
 ```dart
 abstract final class XmaxSDKInfo {
-  static const String version = '1.0.1';
+  static const String version = '1.0.0';
 }
 ```
 

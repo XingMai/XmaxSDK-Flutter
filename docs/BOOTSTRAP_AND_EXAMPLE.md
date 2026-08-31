@@ -98,7 +98,7 @@ Flutter/
 ```yaml
 name: xmax_sdk
 description: Xmax SDK for Flutter.
-version: 1.0.1
+version: 1.0.0
 publish_to: none
 
 environment:

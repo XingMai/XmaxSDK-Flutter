@@ -1,6 +1,6 @@
 # XmaxSDK Flutter
 
-XmaxSDK 的 Flutter 摄像头版本，公开 API、分层架构、实时状态和服务端协议以 iOS XmaxSDK 1.0.1 为基准。
+XmaxSDK 的 Flutter 摄像头版本，公开 API、分层架构、实时状态和服务端协议以 iOS XmaxSDK 1.0.0 为基准。
 
 支持 iOS 15+ 和 Android API 26+，包含：
 
