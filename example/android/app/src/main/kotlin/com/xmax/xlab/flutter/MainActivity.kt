@@ -1,4 +1,4 @@
-package ai.xmax.xmax_sdk_example
+package com.xmax.xlab.flutter
 
 import io.flutter.embedding.android.FlutterActivity
 

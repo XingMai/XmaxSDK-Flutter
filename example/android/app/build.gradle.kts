@@ -5,7 +5,7 @@ plugins {
 }
 
 android {
-    namespace = "ai.xmax.xmax_sdk_example"
+    namespace = "com.xmax.xlab.flutter"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -15,7 +15,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "ai.xmax.xmax_sdk_example"
+        applicationId = "com.xmax.xlab.flutter"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = 26
