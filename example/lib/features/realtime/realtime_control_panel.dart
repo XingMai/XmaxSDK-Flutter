@@ -391,7 +391,7 @@ final class XLabRealtimeControlPanel extends StatelessWidget {
   }
 }
 
-final class _ReferenceStrip extends StatelessWidget {
+final class _ReferenceStrip extends StatefulWidget {
   const _ReferenceStrip({
     required this.references,
     required this.selectedReference,
@@ -407,35 +407,102 @@ final class _ReferenceStrip extends StatelessWidget {
   final VoidCallback onAddReference;
 
   @override
+  State<_ReferenceStrip> createState() => _ReferenceStripState();
+}
+
+final class _ReferenceStripState extends State<_ReferenceStrip> {
+  final Map<String, GlobalKey> _referenceKeys = <String, GlobalKey>{};
+
+  @override
+  void initState() {
+    super.initState();
+    _scheduleCenterSelectedReference();
+  }
+
+  @override
+  void didUpdateWidget(covariant _ReferenceStrip oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final oldIndex = _selectedIndex(oldWidget);
+    final newIndex = _selectedIndex(widget);
+    if (oldWidget.selectedReference?.id != widget.selectedReference?.id ||
+        oldIndex != newIndex) {
+      _scheduleCenterSelectedReference();
+    }
+  }
+
+  int _selectedIndex(_ReferenceStrip target) {
+    final selectedID = target.selectedReference?.id;
+    if (selectedID == null) return -1;
+    return target.references.indexWhere((item) => item.id == selectedID);
+  }
+
+  void _scheduleCenterSelectedReference() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final selectedID = widget.selectedReference?.id;
+      if (selectedID == null) return;
+      final itemContext = _referenceKeys[selectedID]?.currentContext;
+      if (itemContext == null) return;
+      Scrollable.ensureVisible(
+        itemContext,
+        alignment: 0.5,
+        duration: const Duration(milliseconds: 260),
+        curve: Curves.easeOutCubic,
+        alignmentPolicy: ScrollPositionAlignmentPolicy.explicit,
+      );
+    });
+  }
+
+  @override
   Widget build(BuildContext context) => ListView.separated(
     scrollDirection: Axis.horizontal,
+    clipBehavior: Clip.none,
     padding: const EdgeInsets.only(left: 14, right: 14, bottom: 6),
-    itemCount: references.length + 1,
+    itemCount: widget.references.length + 1,
     separatorBuilder: (_, _) => const SizedBox(width: 10),
     itemBuilder: (context, index) {
       if (index == 0) {
         return _AddReferenceButton(
-          uploading: uploadingReference,
-          onPressed: uploadingReference ? null : onAddReference,
+          uploading: widget.uploadingReference,
+          onPressed: widget.uploadingReference ? null : widget.onAddReference,
         );
       }
-      final reference = references[index - 1];
-      final selected = selectedReference?.id == reference.id;
+      final reference = widget.references[index - 1];
+      final selected = widget.selectedReference?.id == reference.id;
       return GestureDetector(
-        onTap: () => onReferenceChanged(selected ? null : reference),
+        key: _referenceKeys.putIfAbsent(reference.id, GlobalKey.new),
+        onTap: () => widget.onReferenceChanged(selected ? null : reference),
         child: Container(
           width: 44,
           height: 44,
-          padding: EdgeInsets.all(selected ? 2 : 0),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(11),
-            border: selected
-                ? Border.all(color: const Color(0xFFFF2E88), width: 2)
-                : null,
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(selected ? 7 : 9),
-            child: _ReferenceImage(reference: reference),
+          color: Colors.transparent,
+          child: Stack(
+            clipBehavior: Clip.none,
+            fit: StackFit.expand,
+            children: <Widget>[
+              ClipRRect(
+                borderRadius: BorderRadius.circular(9),
+                child: _ReferenceImage(reference: reference),
+              ),
+              if (selected)
+                Positioned(
+                  top: -2,
+                  right: -2,
+                  bottom: -2,
+                  left: -2,
+                  child: IgnorePointer(
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(11),
+                        border: Border.all(
+                          color: const Color(0xFFFF2E88),
+                          width: 2,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
           ),
         ),
       );
