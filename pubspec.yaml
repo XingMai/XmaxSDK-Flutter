@@ -1,0 +1,21 @@
+name: xmax_sdk
+description: Xmax SDK for Flutter.
+version: 1.0.0
+publish_to: none
+
+environment:
+  sdk: ">=3.9.0 <4.0.0"
+  flutter: ">=3.35.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  tencentcloud_cos_sdk_plugin_nobeacon: 1.2.9
+  volc_engine_rtc: 3.60.6
+
+dev_dependencies:
+  flutter_lints: 6.0.0
+  flutter_test:
+    sdk: flutter
+
+flutter:

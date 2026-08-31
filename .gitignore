@@ -1,0 +1,38 @@
+# Miscellaneous
+*.class
+*.log
+*.pyc
+*.swp
+.DS_Store
+.atom/
+.build/
+.buildlog/
+.history
+.svn/
+.swiftpm/
+
+# IDE
+*.iml
+*.ipr
+*.iws
+.idea/
+
+# FVM: commit .fvmrc, ignore SDK links and caches.
+.fvm/
+
+# Flutter/Dart/Pub
+**/doc/api/
+**/ios/Flutter/.last_build_id
+.dart_tool/
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+/build/
+/coverage/
+/pubspec.lock
+**/android/build/reports/
+
+# Build outputs
+app.*.symbols
+app.*.map.json
+.widget_preview/
