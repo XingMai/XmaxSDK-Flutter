@@ -128,7 +128,10 @@ final class _XmaxVideoViewState extends State<XmaxVideoView> {
       renderMode: widget.videoContentMode == VideoContentMode.fit
           ? VideoRenderMode.fit
           : VideoRenderMode.hidden,
-      backgroundColor: 0xFF000000,
+      // VolcEngine's Android bridge reflects this value into a signed Java
+      // int. An ARGB value such as 0xFF000000 is serialized as 4278190080 and
+      // fails that conversion; RGB black matches the plugin default.
+      backgroundColor: 0x000000,
     );
   }
 

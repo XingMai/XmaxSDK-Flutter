@@ -193,6 +193,13 @@ manifest merging. Copy the cleanup declarations from the example's
 [`build.gradle.kts`](example/android/app/build.gradle.kts) for the AndroidX vector
 dependency constraints used by the example.
 
+The full VolcEngine RTC AAR also contains optional native extensions that link
+against the shared NDK C++ runtime without bundling it. Ensure the host APK includes
+`libc++_shared.so` for every enabled ABI. The example's
+[`build.gradle.kts`](example/android/app/build.gradle.kts) includes a cross-platform
+`prepareRtcCppRuntime` task that copies the matching runtime from the pinned NDK;
+apply the same host configuration when integrating XmaxSDK into another Android app.
+
 ## Getting Started
 
 ### Create a client
