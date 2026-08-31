@@ -51,7 +51,7 @@ environment:
 
 ## 4. Package 初始化
 
-在当前 `/Users/xmax.ai/dev/Xmax/Flutter` 根目录执行：
+在当前 `/Users/xmax.ai/dev/Xmax/Flutter/XmaxSDK` Package 根目录执行：
 
 ```shell
 fvm flutter create \
