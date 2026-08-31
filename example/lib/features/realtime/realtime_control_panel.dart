@@ -1,6 +1,7 @@
-import 'dart:typed_data';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 enum XLabRealtimePanelMode {
   character('charx', '换形象', '视频中角色替换成参考图中角色'),
@@ -38,154 +39,31 @@ final class XLabRealtimeReference {
   final String referencePath;
   final String? iconURL;
   final Uint8List? iconBytes;
+
+  factory XLabRealtimeReference.fromJson(Map<String, dynamic> json) =>
+      XLabRealtimeReference(
+        id: json['id'] as String,
+        categoryID: json['categoryID'] as String,
+        title: json['title'] as String,
+        iconURL: json['iconURL'] as String,
+        referencePath: json['referencePath'] as String,
+      );
 }
 
-const xLabRealtimeReferences = <XLabRealtimeReference>[
-  XLabRealtimeReference(
-    id: 'xgp-53f286ca852e494c',
-    categoryID: 'charx',
-    title: '奶龙',
-    iconURL:
-        'https://assets.ducktracks.fun/xlive/gameplay/feishu/charx/UOOdbmssxobSxox6sPGcpIRjndd.png',
-    referencePath:
-        'https://assets.ducktracks.fun/xlive/gameplay/feishu/charx/HjBSbgbjtoEMzzxLi5jc6iq9nMe.png',
-  ),
-  XLabRealtimeReference(
-    id: 'xgp-edacd6760a584092',
-    categoryID: 'charx',
-    title: '喜多川海梦',
-    iconURL:
-        'https://assets.ducktracks.fun/xlive/gameplay/feishu/charx/Wlqcba19korj2zxQZl0cQpJRnhD.png',
-    referencePath:
-        'https://assets.ducktracks.fun/xlive/gameplay/feishu/charx/BlSXbbvUpoVvBoxo2KDcoS2nnxh.png',
-  ),
-  XLabRealtimeReference(
-    id: 'xgp-90545d73d5a04111',
-    categoryID: 'charx',
-    title: '黄昏',
-    iconURL:
-        'https://assets.ducktracks.fun/xlive/gameplay/feishu/charx/TCvFbZQASokaU8xJMzkcQUv8nXb.png',
-    referencePath:
-        'https://assets.ducktracks.fun/xlive/gameplay/feishu/charx/DRfmb3AJBof693xeVRhczhQ6ntb.png',
-  ),
-  XLabRealtimeReference(
-    id: 'xgp-92710eb588ac4379',
-    categoryID: 'charx',
-    title: '卡布奇诺',
-    iconURL:
-        'https://assets.ducktracks.fun/xlive/gameplay/feishu/charx/W2ZvbzQRyoEqgrxnpLLcO1iVnS5.png',
-    referencePath:
-        'https://assets.ducktracks.fun/xlive/gameplay/feishu/charx/Na42b2qDfoslzexy553cqvZRn8B.png',
-  ),
-  XLabRealtimeReference(
-    id: 'xgp-541a9f88486a437c',
-    categoryID: 'clothx',
-    title: '女装',
-    iconURL:
-        'https://assets.ducktracks.fun/xlive/gameplay/feishu/clothx/PerfbUxRdoGfADx70AJcQdEunse.png',
-    referencePath:
-        'https://assets.ducktracks.fun/xlive/gameplay/feishu/clothx/VxRobHUleoX4hXxU2Jmc8X61nGh.png',
-  ),
-  XLabRealtimeReference(
-    id: 'xgp-c202ac728d394737',
-    categoryID: 'clothx',
-    title: '女装',
-    iconURL:
-        'https://assets.ducktracks.fun/xlive/gameplay/feishu/clothx/YPERbHwinom0VBxgLfrcfqHVnvh.png',
-    referencePath:
-        'https://assets.ducktracks.fun/xlive/gameplay/feishu/clothx/ZW0Db6FVnoDYxvxKW8Hci8GfnGh.png',
-  ),
-  XLabRealtimeReference(
-    id: 'xgp-8219a934f4cb4127',
-    categoryID: 'clothx',
-    title: '女装',
-    iconURL:
-        'https://assets.ducktracks.fun/xlive/gameplay/feishu/clothx/Dq2xb499ioxVuOxCggKc9SVenmg.png',
-    referencePath:
-        'https://assets.ducktracks.fun/xlive/gameplay/feishu/clothx/Fdp2bqvA1op6jcxOhOccW6TanAg.png',
-  ),
-  XLabRealtimeReference(
-    id: 'xgp-3c48cf964ecb4708',
-    categoryID: 'clothx',
-    title: '女装',
-    iconURL:
-        'https://assets.ducktracks.fun/xlive/gameplay/feishu/clothx/BrPlbbwlCoLkfTxYocHcTggTnze.png',
-    referencePath:
-        'https://assets.ducktracks.fun/xlive/gameplay/feishu/clothx/CtjHbFmkEonao4xdR9mczjyPnYK.png',
-  ),
-  XLabRealtimeReference(
-    id: 'xgp-218ec86016674037',
-    categoryID: 'vibex',
-    title: '王者荣耀孙权',
-    iconURL:
-        'https://assets.ducktracks.fun/xlive/gameplay/feishu/vibex/Yz3ybbA6iokGbDxpQBacCnI6n1m.png',
-    referencePath:
-        'https://assets.ducktracks.fun/xlive/gameplay/feishu/vibex/JUZAbWyMQo0057x6FQ9cbVBGnjf.jpg',
-  ),
-  XLabRealtimeReference(
-    id: 'xgp-84c0a6202c17420c',
-    categoryID: 'vibex',
-    title: '哪吒老大',
-    iconURL:
-        'https://assets.ducktracks.fun/xlive/gameplay/feishu/vibex/DI6ebgUkCofFdRxMh8McoJmfnkf.png',
-    referencePath:
-        'https://assets.ducktracks.fun/xlive/gameplay/feishu/vibex/M0DhbS86moarEIxMXkTce9TznW0.png',
-  ),
-  XLabRealtimeReference(
-    id: 'xgp-4c138317a3524f85',
-    categoryID: 'vibex',
-    title: '芭比特',
-    iconURL:
-        'https://assets.ducktracks.fun/xlive/gameplay/feishu/vibex/ZdhNbWMuloryVmxCt78caKD6n86.png',
-    referencePath:
-        'https://assets.ducktracks.fun/xlive/gameplay/feishu/vibex/GXJPbd2edoRQWpx5GLrcat6snbc.png',
-  ),
-  XLabRealtimeReference(
-    id: 'xgp-79f704db0763408b',
-    categoryID: 'vibex',
-    title: '神代类',
-    iconURL:
-        'https://assets.ducktracks.fun/xlive/gameplay/feishu/vibex/JnCCbS7yyoAd39xenRgcQUY3nUe.png',
-    referencePath:
-        'https://assets.ducktracks.fun/xlive/gameplay/feishu/vibex/V9dnboWqWoGiZJxa9F8cjqZLnEf.jpg',
-  ),
-  XLabRealtimeReference(
-    id: 'xgp-61e24b1672dc4d5e',
-    categoryID: 'dimx',
-    title: '光头强',
-    iconURL:
-        'https://assets.ducktracks.fun/xlive/gameplay/feishu/dimx/LHzEbR8DTowxLUxsDKBcX2ginag.png',
-    referencePath:
-        'https://assets.ducktracks.fun/xlive/gameplay/feishu/dimx/EdUubKIAfoBw3pxKMSBcWbI5nkb.jpg',
-  ),
-  XLabRealtimeReference(
-    id: 'xgp-7ca6c15cdd844ae3',
-    categoryID: 'dimx',
-    title: '熊二',
-    iconURL:
-        'https://assets.ducktracks.fun/xlive/gameplay/feishu/dimx/GmVqbAQZroGe5jxemYkcIgv3nFf.png',
-    referencePath:
-        'https://assets.ducktracks.fun/xlive/gameplay/feishu/dimx/Np1qbz5l1oetgVxUkxpcqapOnJh.jpg',
-  ),
-  XLabRealtimeReference(
-    id: 'xgp-7a85e596eed34fb8',
-    categoryID: 'dimx',
-    title: '流萤',
-    iconURL:
-        'https://assets.ducktracks.fun/xlive/gameplay/feishu/dimx/K7sLbUE8goU6WPxKAdqcAMEtnCb.png',
-    referencePath:
-        'https://assets.ducktracks.fun/xlive/gameplay/feishu/dimx/Rca8brql3o8pCfxWnl7cF3c7nFg.png',
-  ),
-  XLabRealtimeReference(
-    id: 'xgp-ef9b5ca7f4144954',
-    categoryID: 'dimx',
-    title: '祁煜',
-    iconURL:
-        'https://assets.ducktracks.fun/xlive/gameplay/feishu/dimx/No2ibdX85oTLaixSaigcTdqVneb.png',
-    referencePath:
-        'https://assets.ducktracks.fun/xlive/gameplay/feishu/dimx/H30nb42tuoeoMBxAmqqc6apDnnc.jpg',
-  ),
-];
+Future<List<XLabRealtimeReference>> loadXLabRealtimeReferences() async {
+  final catalog =
+      jsonDecode(
+            await rootBundle.loadString(
+              'assets/realtime_reference_catalog.json',
+            ),
+          )
+          as Map<String, dynamic>;
+  final items = catalog['items'] as List<dynamic>;
+  return items
+      .cast<Map<String, dynamic>>()
+      .map(XLabRealtimeReference.fromJson)
+      .toList(growable: false);
+}
 
 final class XLabRealtimeControlPanel extends StatelessWidget {
   const XLabRealtimeControlPanel({
@@ -226,9 +104,10 @@ final class XLabRealtimeControlPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) => ColoredBox(
     color: const Color(0xFF101010),
-    child: SafeArea(
-      top: false,
-      minimum: const EdgeInsets.only(bottom: 16),
+    child: Padding(
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.viewPaddingOf(context).bottom + 16,
+      ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[

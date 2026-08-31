@@ -32,7 +32,7 @@ class _RealtimePageState extends State<RealtimePage>
   late XmaxRealtimeManaging _manager;
   late XmaxStorageManaging _storageManager;
   final _promptController = TextEditingController();
-  final _references = <XLabRealtimeReference>[...xLabRealtimeReferences];
+  final _references = <XLabRealtimeReference>[];
   RealtimeMediaStream? _localStream;
   RealtimeMediaStream? _remoteStream;
   RealtimeState _state = const RealtimeState(
@@ -57,8 +57,15 @@ class _RealtimePageState extends State<RealtimePage>
         : XLabRealtimePanelMode.character;
     _promptController.addListener(_promptDidChange);
     WidgetsBinding.instance.addObserver(this);
+    unawaited(_loadReferences());
     _configureManager();
     unawaited(_startCamera());
+  }
+
+  Future<void> _loadReferences() async {
+    final references = await loadXLabRealtimeReferences();
+    if (!mounted) return;
+    setState(() => _references.addAll(references));
   }
 
   void _configureManager() {
