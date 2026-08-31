@@ -1,9 +1,11 @@
 import 'dart:async';
 
+import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:xmax_sdk/xmax_sdk.dart';
 
 import '../../ui/xlab_theme.dart';
+import 'realtime_control_panel.dart';
 
 class RealtimePage extends StatefulWidget {
   const RealtimePage({
@@ -28,16 +30,21 @@ class _RealtimePageState extends State<RealtimePage>
   );
 
   late XmaxRealtimeManaging _manager;
-  final _promptController = TextEditingController(text: '让画面自然动起来');
+  late XmaxStorageManaging _storageManager;
+  final _promptController = TextEditingController();
+  final _references = <XLabRealtimeReference>[...xLabRealtimeReferences];
   RealtimeMediaStream? _localStream;
   RealtimeMediaStream? _remoteStream;
   RealtimeState _state = const RealtimeState(
     connectionState: RealtimeConnectionState.idle,
   );
   XmaxError? _lastError;
-  RealtimeNetworkQuality? _networkQuality;
+  late XLabRealtimePanelMode _panelMode;
+  XLabRealtimeReference? _selectedReference;
+  XLabRealtimeReference? _promptReference;
   bool _cameraReady = false;
   bool _busy = false;
+  bool _uploadingReference = false;
   late final _XLabTrajectoryRenderer? _customRenderer = widget.customTrajectory
       ? _XLabTrajectoryRenderer()
       : null;
@@ -45,6 +52,10 @@ class _RealtimePageState extends State<RealtimePage>
   @override
   void initState() {
     super.initState();
+    _panelMode = widget.customTrajectory
+        ? XLabRealtimePanelMode.touch
+        : XLabRealtimePanelMode.character;
+    _promptController.addListener(_promptDidChange);
     WidgetsBinding.instance.addObserver(this);
     _configureManager();
     unawaited(_startCamera());
@@ -57,6 +68,7 @@ class _RealtimePageState extends State<RealtimePage>
         loggerOptions: XmaxLoggerOption.all,
       ),
     );
+    _storageManager = client.createStorageManager();
     _manager = client.createRealtimeManager(
       options: const RealtimeConfiguration(model: RealtimeModel.x2_0),
     );
@@ -76,9 +88,6 @@ class _RealtimePageState extends State<RealtimePage>
     });
     _manager.setCameraPreviewReadyListener(() {
       if (mounted) setState(() => _cameraReady = true);
-    });
-    _manager.setNetworkQualityListener((quality) {
-      if (mounted) setState(() => _networkQuality = quality);
     });
     _manager.setPerformanceAlarmListener((alarm) {
       if (mounted && alarm.status == RealtimePerformanceStatus.limited) {
@@ -111,19 +120,8 @@ class _RealtimePageState extends State<RealtimePage>
     }
   }
 
-  Future<void> _toggleGeneration() async {
+  Future<void> _startGeneration(RealtimeContext context) async {
     if (_busy) return;
-    if (_state.connectionState == RealtimeConnectionState.generating) {
-      setState(() => _busy = true);
-      await _manager.stopGeneration();
-      if (mounted) {
-        setState(() {
-          _busy = false;
-          _remoteStream = null;
-        });
-      }
-      return;
-    }
     final localStream = _localStream;
     if (localStream == null) return;
     setState(() {
@@ -131,11 +129,13 @@ class _RealtimePageState extends State<RealtimePage>
       _lastError = null;
     });
     try {
+      final generating =
+          _state.connectionState == RealtimeConnectionState.generating;
       final remote = await _manager.startGeneration(
-        localStream: localStream,
-        context: RealtimeContext(prompt: _promptController.text),
+        localStream: generating ? null : localStream,
+        context: context,
       );
-      if (mounted) setState(() => _remoteStream = remote);
+      if (mounted && remote != null) setState(() => _remoteStream = remote);
     } catch (error) {
       _showError(error);
     } finally {
@@ -143,20 +143,109 @@ class _RealtimePageState extends State<RealtimePage>
     }
   }
 
-  Future<void> _updatePrompt() async {
-    if (_state.connectionState != RealtimeConnectionState.generating) {
-      await _toggleGeneration();
+  Future<void> _stopGeneration() async {
+    if (_busy || _state.connectionState != RealtimeConnectionState.generating) {
       return;
     }
     setState(() => _busy = true);
     try {
-      await _manager.startGeneration(
-        context: RealtimeContext(prompt: _promptController.text),
-      );
+      await _manager.disconnect();
+      if (mounted) {
+        setState(() {
+          _remoteStream = null;
+          _selectedReference = null;
+        });
+      }
     } catch (error) {
       _showError(error);
     } finally {
       if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  void _selectMode(XLabRealtimePanelMode mode) {
+    if (_panelMode == mode) return;
+    setState(() => _panelMode = mode);
+  }
+
+  Future<void> _selectReference(XLabRealtimeReference? reference) async {
+    setState(() => _selectedReference = reference);
+    if (reference == null) {
+      await _stopGeneration();
+      return;
+    }
+    await _startGeneration(
+      RealtimeContext(
+        prompt: _panelMode.prompt,
+        referencePath: reference.referencePath,
+      ),
+    );
+  }
+
+  Future<void> _startTouchGeneration() => _startGeneration(
+    RealtimeContext(prompt: XLabRealtimePanelMode.touch.prompt),
+  );
+
+  Future<void> _submitPrompt() async {
+    final prompt = _promptController.text.trim();
+    if (prompt.isEmpty) return;
+    await _startGeneration(
+      RealtimeContext(
+        prompt: prompt,
+        referencePath: _promptReference?.referencePath,
+      ),
+    );
+  }
+
+  Future<void> _pickReference({required bool forPrompt}) async {
+    if (_uploadingReference || _busy) return;
+    const images = XTypeGroup(
+      label: '参考图',
+      extensions: <String>['jpg', 'jpeg', 'png', 'webp'],
+      uniformTypeIdentifiers: <String>['public.image'],
+      mimeTypes: <String>['image/*'],
+    );
+    try {
+      final file = await openFile(
+        acceptedTypeGroups: const <XTypeGroup>[images],
+      );
+      if (file == null || !mounted) return;
+      setState(() {
+        _uploadingReference = true;
+        _lastError = null;
+      });
+      final bytes = await file.readAsBytes();
+      final uploaded = await _storageManager.uploadImage(
+        at: Uri.file(file.path),
+      );
+      if (!mounted) return;
+      final reference = XLabRealtimeReference(
+        id: 'custom-${DateTime.now().microsecondsSinceEpoch}',
+        categoryID: forPrompt ? XLabRealtimePanelMode.free.id : _panelMode.id,
+        title: file.name,
+        referencePath: uploaded.url.toString(),
+        iconBytes: bytes,
+      );
+      setState(() {
+        _references.insert(0, reference);
+        if (forPrompt) {
+          _promptReference = reference;
+        } else {
+          _selectedReference = reference;
+        }
+      });
+      if (!forPrompt) {
+        await _startGeneration(
+          RealtimeContext(
+            prompt: _panelMode.prompt,
+            referencePath: reference.referencePath,
+          ),
+        );
+      }
+    } catch (error) {
+      _showError(error);
+    } finally {
+      if (mounted) setState(() => _uploadingReference = false);
     }
   }
 
@@ -176,6 +265,10 @@ class _RealtimePageState extends State<RealtimePage>
   void _showError(Object error) {
     final xmaxError = XmaxError.from(error);
     if (mounted) setState(() => _lastError = xmaxError);
+  }
+
+  void _promptDidChange() {
+    if (mounted) setState(() {});
   }
 
   @override
@@ -205,9 +298,9 @@ class _RealtimePageState extends State<RealtimePage>
     _manager.setStateListener(null);
     _manager.setErrorListener(null);
     _manager.setCameraPreviewReadyListener(null);
-    _manager.setNetworkQualityListener(null);
     _manager.setPerformanceAlarmListener(null);
     unawaited(_manager.close());
+    _promptController.removeListener(_promptDidChange);
     _promptController.dispose();
     _customRenderer?.dispose();
     super.dispose();
@@ -218,221 +311,215 @@ class _RealtimePageState extends State<RealtimePage>
     final generating =
         _state.connectionState == RealtimeConnectionState.generating;
     final displayed = generating ? _remoteStream : _localStream;
-    final accent = widget.customTrajectory
-        ? XLabPalette.pink
-        : XLabPalette.mint;
     return Scaffold(
       resizeToAvoidBottomInset: true,
-      body: XLabBackground(
-        accent: accent,
-        child: SafeArea(
-          child: Column(
+      backgroundColor: const Color(0xFF101010),
+      body: Stack(
+        children: <Widget>[
+          Column(
             children: <Widget>[
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 10),
-                child: XLabTopBar(
-                  title: widget.customTrajectory ? '自定义轨迹' : '摄像头实时流',
-                  accent: accent,
-                  version: XmaxSDKInfo.version,
-                  onBack: () => Navigator.of(context).pop(),
+              Expanded(
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: <Widget>[
+                    const DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          stops: <double>[0, 0.48, 1],
+                          colors: <Color>[
+                            Color(0xFF171719),
+                            Color(0xFF0D0D0F),
+                            Color(0xFF050506),
+                          ],
+                        ),
+                      ),
+                    ),
+                    if (displayed?.videoTrack != null)
+                      XmaxVideoView(
+                        track: displayed!.videoTrack,
+                        videoContentMode: VideoContentMode.fill,
+                        isInteractionEnabled:
+                            generating &&
+                            _panelMode == XLabRealtimePanelMode.touch,
+                        trajectoryRenderer: _customRenderer,
+                      )
+                    else
+                      const Center(
+                        child: Icon(
+                          Icons.videocam_off_outlined,
+                          color: Color(0x55FFFFFF),
+                          size: 44,
+                        ),
+                      ),
+                    if (_busy ||
+                        !_cameraReady ||
+                        _state.connectionState ==
+                            RealtimeConnectionState.connecting)
+                      ColoredBox(
+                        color: Colors.black.withValues(alpha: 0.34),
+                        child: Center(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: <Widget>[
+                              const SizedBox(
+                                width: 28,
+                                height: 28,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2.4,
+                                  color: Colors.white,
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              Text(
+                                _loadingText,
+                                style: const TextStyle(
+                                  color: Color(0xB3FFFFFF),
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                  ],
                 ),
               ),
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(18, 6, 18, 0),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(22),
-                    child: Stack(
-                      fit: StackFit.expand,
-                      children: <Widget>[
-                        const ColoredBox(color: Color(0xFF101010)),
-                        if (displayed?.videoTrack != null)
-                          XmaxVideoView(
-                            track: displayed!.videoTrack,
-                            videoContentMode: VideoContentMode.fill,
-                            isInteractionEnabled: generating,
-                            trajectoryRenderer: _customRenderer,
-                          )
-                        else
-                          const Center(
-                            child: Icon(
-                              Icons.videocam_off_outlined,
-                              color: Color(0x55FFFFFF),
-                              size: 44,
-                            ),
-                          ),
-                        Positioned(
-                          left: 12,
-                          top: 12,
-                          child: _StatusPill(text: _statusText, color: accent),
-                        ),
-                        Positioned(
-                          right: 12,
-                          top: 12,
-                          child: IconButton.filledTonal(
-                            tooltip: '翻转摄像头',
-                            onPressed: _busy ? null : _switchCamera,
-                            icon: const Icon(Icons.cameraswitch_outlined),
-                          ),
-                        ),
-                        if (_busy ||
-                            _state.connectionState ==
-                                RealtimeConnectionState.connecting)
-                          ColoredBox(
-                            color: Colors.black.withValues(alpha: 0.62),
-                            child: Center(
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: <Widget>[
-                                  CircularProgressIndicator(color: accent),
-                                  const SizedBox(height: 14),
-                                  Text(
-                                    _loadingText,
-                                    style: const TextStyle(
-                                      color: Colors.white70,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                      ],
+              XLabRealtimeControlPanel(
+                mode: _panelMode,
+                generating: generating,
+                busy: _busy,
+                promptController: _promptController,
+                references: _references,
+                selectedReference: _selectedReference,
+                promptReference: _promptReference,
+                uploadingReference: _uploadingReference,
+                onModeChanged: _selectMode,
+                onStop: () => unawaited(_stopGeneration()),
+                onReferenceChanged: (reference) =>
+                    unawaited(_selectReference(reference)),
+                onAddReference: () =>
+                    unawaited(_pickReference(forPrompt: false)),
+                onTouchStart: () => unawaited(_startTouchGeneration()),
+                onPromptSubmit: () => unawaited(_submitPrompt()),
+                onPromptReference: () =>
+                    unawaited(_pickReference(forPrompt: true)),
+              ),
+            ],
+          ),
+          SafeArea(
+            bottom: false,
+            child: Stack(
+              children: <Widget>[
+                Positioned(
+                  left: 12,
+                  top: 8,
+                  child: SizedBox(
+                    width: 44,
+                    height: 44,
+                    child: IconButton(
+                      tooltip: '返回首页',
+                      padding: EdgeInsets.zero,
+                      onPressed: () => Navigator.of(context).pop(),
+                      icon: const Icon(
+                        Icons.arrow_back_rounded,
+                        color: Colors.white,
+                        size: 32,
+                        shadows: <Shadow>[
+                          Shadow(color: Colors.black54, blurRadius: 4),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                Positioned(
+                  right: 8,
+                  top: 6,
+                  child: _CameraActionButton(
+                    enabled: !_busy && _localStream != null,
+                    onPressed: _switchCamera,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (_lastError != null)
+            SafeArea(
+              bottom: false,
+              child: Align(
+                alignment: Alignment.topCenter,
+                child: Container(
+                  margin: const EdgeInsets.fromLTRB(64, 64, 64, 0),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 9,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0xD9251719),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: const Color(0x55FF6B72)),
+                  ),
+                  child: Text(
+                    _lastError!.message,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      color: Color(0xFFFFB5B5),
+                      fontSize: 11,
                     ),
                   ),
                 ),
               ),
-              _controlPanel(accent, generating),
-            ],
-          ),
-        ),
+            ),
+        ],
       ),
     );
   }
 
-  Widget _controlPanel(Color accent, bool generating) => Container(
-    margin: const EdgeInsets.fromLTRB(18, 12, 18, 14),
-    padding: const EdgeInsets.all(12),
-    decoration: BoxDecoration(
-      color: const Color(0xF0101010),
-      borderRadius: BorderRadius.circular(18),
-      border: Border.all(color: Colors.white.withValues(alpha: 0.10)),
-    ),
-    child: Column(
-      mainAxisSize: MainAxisSize.min,
-      children: <Widget>[
-        if (_lastError != null)
-          Container(
-            width: double.infinity,
-            margin: const EdgeInsets.only(bottom: 10),
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: const Color(0x29FF5F68),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Text(
-              _lastError!.message,
-              style: const TextStyle(color: Color(0xFFFFB5B5), fontSize: 11),
-            ),
-          ),
-        Row(
-          children: <Widget>[
-            _StatusPill(
-              text: widget.customTrajectory ? 'CUSTOM EFFECT' : 'CAMERA',
-              color: accent,
-            ),
-            const Spacer(),
-            Text(
-              _networkQuality == null
-                  ? 'NETWORK —'
-                  : 'UP ${_networkQuality!.uplink.value} / DOWN ${_networkQuality!.downlink.value}',
-              style: const TextStyle(color: Color(0x667F8C9D), fontSize: 8),
-            ),
-          ],
-        ),
-        const SizedBox(height: 10),
-        TextField(
-          controller: _promptController,
-          minLines: 1,
-          maxLines: 3,
-          textInputAction: TextInputAction.done,
-          onSubmitted: (_) => unawaited(_updatePrompt()),
-          decoration: InputDecoration(
-            hintText: '输入生成提示词',
-            filled: true,
-            fillColor: const Color(0xFF252525),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(20),
-              borderSide: BorderSide.none,
-            ),
-            suffixIcon: IconButton(
-              onPressed: _busy ? null : _updatePrompt,
-              icon: Icon(Icons.arrow_upward_rounded, color: accent),
-            ),
-          ),
-        ),
-        const SizedBox(height: 10),
-        SizedBox(
-          width: double.infinity,
-          height: 42,
-          child: FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: generating
-                  ? Colors.white.withValues(alpha: 0.12)
-                  : accent,
-              foregroundColor: generating
-                  ? Colors.white
-                  : const Color(0xFF07110D),
-            ),
-            onPressed: _busy || _localStream == null ? null : _toggleGeneration,
-            child: Text(
-              generating ? '停止生成' : '点击开始生成',
-              style: const TextStyle(fontWeight: FontWeight.w800),
-            ),
-          ),
-        ),
-        if (generating) ...<Widget>[
-          const SizedBox(height: 8),
-          const Text(
-            '在画面上拖拽，用轨迹控制角色',
-            style: TextStyle(color: Color(0x70FFFFFF), fontSize: 11),
-          ),
-        ],
-      ],
-    ),
-  );
-
-  String get _statusText {
-    if (!_cameraReady && _localStream != null) return 'CAMERA STARTING';
-    return _state.connectionState.value.toUpperCase();
+  String get _loadingText {
+    if (!_cameraReady) return '正在启动摄像头…';
+    return switch (_state.connectionState) {
+      RealtimeConnectionState.connecting => '正在建立实时连接…',
+      _ => '正在等待生成画面…',
+    };
   }
-
-  String get _loadingText => switch (_state.connectionState) {
-    RealtimeConnectionState.connecting => '正在建立实时连接…',
-    _ => _localStream == null ? '正在启动摄像头…' : '正在等待生成画面…',
-  };
 }
 
-final class _StatusPill extends StatelessWidget {
-  const _StatusPill({required this.text, required this.color});
-  final String text;
-  final Color color;
+final class _CameraActionButton extends StatelessWidget {
+  const _CameraActionButton({required this.enabled, required this.onPressed});
+
+  final bool enabled;
+  final VoidCallback onPressed;
 
   @override
-  Widget build(BuildContext context) => DecoratedBox(
-    decoration: BoxDecoration(
-      color: Colors.black.withValues(alpha: 0.46),
-      borderRadius: BorderRadius.circular(99),
-      border: Border.all(color: color.withValues(alpha: 0.30)),
-    ),
-    child: Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-      child: Text(
-        text,
-        style: TextStyle(
-          color: color,
-          fontSize: 8,
-          fontWeight: FontWeight.w800,
-          letterSpacing: 0.7,
+  Widget build(BuildContext context) => SizedBox(
+    width: 58,
+    height: 62,
+    child: InkResponse(
+      onTap: enabled ? onPressed : null,
+      radius: 29,
+      child: Opacity(
+        opacity: enabled ? 1 : 0.45,
+        child: const Column(
+          children: <Widget>[
+            SizedBox(height: 9),
+            Icon(
+              Icons.sync_rounded,
+              color: Colors.white,
+              size: 28,
+              shadows: <Shadow>[Shadow(color: Colors.black54, blurRadius: 4)],
+            ),
+            SizedBox(height: 5),
+            Text(
+              '翻转',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                shadows: <Shadow>[Shadow(color: Colors.black54, blurRadius: 4)],
+              ),
+            ),
+          ],
         ),
       ),
     ),

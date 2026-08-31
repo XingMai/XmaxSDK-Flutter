@@ -187,14 +187,15 @@ API Key 通过 Example 层的系统偏好存储保留，行为与 XLab 一致；
 
 页面展示：
 
-- 一个 `XmaxVideoView`，先显示本地摄像头 track，生成开始后切换远端 track。
-- 当前 `RealtimeState` 和 `RealtimeConnectionState`。
-- 网络质量、性能告警和最近一次错误。
-- Prompt 输入和生成开始/更新/停止按钮。
-- 前后摄像头切换。
-- 远端音量控制。
-- 可选的轨迹交互开关与自定义 Renderer。
-- 明确的连接、断开和重试操作。
+- 全屏 `XmaxVideoView`，先显示本地摄像头 track，生成开始后切换远端 track。
+- 与 iOS XLab 一致的悬浮返回、前后摄像头切换控件。
+- 与 iOS XLab 一致的底部分类栏、停止入口和安全区布局。
+- 换形象、换装、换风格、虚拟召唤四种远程参考图模式。
+- 自定义参考图通过 `XmaxStorageManaging.uploadImage` 上传 COS，再作为
+  `RealtimeContext.referencePath` 使用；它不是本地图片 RTC 输入管线。
+- 触控动图模式和自由 Prompt 输入模式。
+- 当前 `RealtimeState`、性能告警、最近一次错误和加载状态。
+- 可选的默认或自定义轨迹 Renderer。
 
 生命周期必须在代码中清晰可读：
 
@@ -206,12 +207,16 @@ initState
   → createLocalCameraStream
   → XmaxVideoView(local track)
 
-用户连接
-  → connect(localStream)
-
 用户生成
-  → startGeneration(context)
+  → startGeneration(localStream, context)
   → XmaxVideoView(remote track)
+
+更新生成上下文
+  → startGeneration(context)
+
+用户停止
+  → disconnect
+  → XmaxVideoView(local track)
 
 dispose
   → 移除 listeners
