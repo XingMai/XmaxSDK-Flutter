@@ -81,6 +81,9 @@ final class XLabCard extends StatelessWidget {
     required this.child,
     this.accent = Colors.white,
     this.padding = const EdgeInsets.all(18),
+    this.gradient,
+    this.borderColor,
+    this.clipBehavior = Clip.none,
     this.onTap,
     super.key,
   });
@@ -88,18 +91,26 @@ final class XLabCard extends StatelessWidget {
   final Widget child;
   final Color accent;
   final EdgeInsets padding;
+  final Gradient? gradient;
+  final Color? borderColor;
+  final Clip clipBehavior;
   final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     final content = Container(
+      clipBehavior: clipBehavior,
       padding: padding,
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: <Color>[Color(0xF0141B25), Color(0xF00C1118)],
-        ),
+        gradient:
+            gradient ??
+            const LinearGradient(
+              colors: <Color>[Color(0xF0141B25), Color(0xF00C1118)],
+            ),
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: accent.withValues(alpha: 0.20)),
+        border: Border.all(
+          color: borderColor ?? accent.withValues(alpha: 0.20),
+        ),
         boxShadow: const <BoxShadow>[
           BoxShadow(
             color: Color(0x85000000),
@@ -165,47 +176,53 @@ final class XLabTopBar extends StatelessWidget {
   final VoidCallback? onBack;
 
   @override
-  Widget build(BuildContext context) => SizedBox(
-    height: 72,
-    child: Row(
-      children: <Widget>[
-        if (onBack != null)
-          IconButton(
-            onPressed: onBack,
-            icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
-          )
-        else
-          const _BrandMark(),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              Text(
-                title,
-                style: const TextStyle(
-                  color: XLabPalette.primaryText,
-                  fontSize: 20,
-                  fontWeight: FontWeight.w800,
+  Widget build(BuildContext context) {
+    final isRootHeader = onBack == null;
+    return SizedBox(
+      height: isRootHeader ? 36 : 72,
+      child: Row(
+        children: <Widget>[
+          if (onBack != null)
+            IconButton(
+              onPressed: onBack,
+              icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
+            )
+          else
+            const _BrandMark(),
+          SizedBox(width: isRootHeader ? 11 : 8),
+          Expanded(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text(
+                  title,
+                  style: TextStyle(
+                    color: XLabPalette.primaryText,
+                    fontSize: isRootHeader ? 15 : 20,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: isRootHeader ? 1.8 : 0,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 3),
-              Text(
-                'EXAMPLE / FLUTTER',
-                style: TextStyle(
-                  color: accent.withValues(alpha: 0.72),
-                  fontSize: 8,
-                  letterSpacing: 1,
+                const SizedBox(height: 3),
+                Text(
+                  'EXAMPLE / FLUTTER',
+                  style: TextStyle(
+                    color: isRootHeader
+                        ? Colors.white.withValues(alpha: 0.38)
+                        : accent.withValues(alpha: 0.72),
+                    fontSize: 8,
+                    letterSpacing: 1,
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
-        ),
-        XLabPill('v$version', color: accent),
-      ],
-    ),
-  );
+          XLabPill('v$version', color: accent),
+        ],
+      ),
+    );
+  }
 }
 
 final class _BrandMark extends StatelessWidget {
@@ -213,8 +230,8 @@ final class _BrandMark extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => SizedBox(
-    width: 34,
-    height: 34,
+    width: 32,
+    height: 32,
     child: Stack(
       alignment: Alignment.center,
       children: <Widget>[
@@ -235,6 +252,7 @@ final class _BrandMark extends StatelessWidget {
           'X',
           style: TextStyle(
             color: Color(0xFF07110D),
+            fontSize: 12,
             fontWeight: FontWeight.w900,
           ),
         ),

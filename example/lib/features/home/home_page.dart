@@ -85,14 +85,14 @@ class _HomePageState extends State<HomePage> {
         child: SafeArea(
           child: ListView(
             keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-            padding: const EdgeInsets.fromLTRB(18, 10, 18, 32),
+            padding: const EdgeInsets.fromLTRB(18, 20, 18, 32),
             children: <Widget>[
               const XLabTopBar(
                 title: 'XMAXSDK',
                 accent: XLabPalette.mint,
                 version: XmaxSDKInfo.version,
               ),
-              const SizedBox(height: 22),
+              const SizedBox(height: 34),
               _hero(),
               const SizedBox(height: 12),
               const Row(
@@ -141,6 +141,7 @@ class _HomePageState extends State<HomePage> {
                 tags: const <String>['CANVAS', 'MULTI-TOUCH', 'CUSTOM EFFECT'],
                 color: XLabPalette.pink,
                 icon: Icons.gesture_rounded,
+                iconLabel: 'RENDER',
                 onTap: () => _open(
                   (apiKey) =>
                       RealtimePage(apiKey: apiKey, customTrajectory: true),
@@ -155,6 +156,7 @@ class _HomePageState extends State<HomePage> {
                 tags: const <String>['IMAGE', 'VIDEO', 'REMOTE URL'],
                 color: XLabPalette.orange,
                 icon: Icons.cloud_upload_outlined,
+                iconLabel: 'UPLOAD',
                 onTap: () => _open((apiKey) => StoragePage(apiKey: apiKey)),
               ),
               const SizedBox(height: 38),
@@ -607,6 +609,7 @@ final class _FeatureCard extends StatelessWidget {
     required this.tags,
     required this.color,
     required this.icon,
+    required this.iconLabel,
     required this.onTap,
   });
   final String category;
@@ -616,97 +619,249 @@ final class _FeatureCard extends StatelessWidget {
   final List<String> tags;
   final Color color;
   final IconData icon;
+  final String iconLabel;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) => XLabCard(
     accent: color,
+    padding: EdgeInsets.zero,
+    gradient: const LinearGradient(
+      colors: <Color>[Color(0xF01C1813), Color(0xF00D1117), Color(0xF0151210)],
+    ),
+    borderColor: const Color(0x21FFFFFF),
+    clipBehavior: Clip.antiAlias,
     onTap: onTap,
     child: Stack(
       children: <Widget>[
         Positioned(
-          right: 0,
-          top: -8,
-          child: Text(
-            watermark,
-            style: TextStyle(
-              color: color.withValues(alpha: 0.07),
-              fontSize: 50,
-              fontWeight: FontWeight.w900,
+          right: -40,
+          top: -52,
+          child: Container(
+            width: 126,
+            height: 126,
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.09),
+              shape: BoxShape.circle,
             ),
           ),
         ),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Text(
-              category,
-              style: TextStyle(
-                color: color,
-                fontSize: 9,
-                fontWeight: FontWeight.w800,
-                letterSpacing: 0.9,
-              ),
+        Positioned(
+          right: 16,
+          bottom: -9,
+          child: Text(
+            watermark,
+            style: const TextStyle(
+              color: Color(0x08FFFFFF),
+              fontSize: 45,
+              fontWeight: FontWeight.bold,
+              letterSpacing: -2,
             ),
-            const SizedBox(height: 16),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                Container(
-                  width: 48,
-                  height: 48,
-                  decoration: BoxDecoration(
-                    color: color.withValues(alpha: 0.10),
-                    borderRadius: BorderRadius.circular(13),
-                  ),
-                  child: Icon(icon, color: color),
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: <Widget>[
-                      Text(
-                        title,
-                        style: const TextStyle(
-                          color: XLabPalette.primaryText,
-                          fontSize: 18,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        subtitle,
-                        style: const TextStyle(
-                          color: XLabPalette.secondaryText,
-                          fontSize: 11,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const Icon(
-                  Icons.chevron_right_rounded,
-                  color: Color(0xFF607086),
-                ),
-              ],
+          ),
+        ),
+        Positioned(
+          left: 0,
+          top: 47,
+          child: Container(
+            width: 3,
+            height: 54,
+            decoration: BoxDecoration(
+              color: color,
+              borderRadius: BorderRadius.circular(1.5),
             ),
-            const SizedBox(height: 16),
-            Wrap(
-              spacing: 7,
-              runSpacing: 7,
-              children: tags
-                  .map(
-                    (tag) => XLabPill(
-                      tag,
-                      color: tag == tags.last ? color : const Color(0xFF8E9AA9),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Row(
+                children: <Widget>[
+                  Container(
+                    width: 7,
+                    height: 7,
+                    decoration: BoxDecoration(
+                      color: color,
+                      shape: BoxShape.circle,
+                      boxShadow: <BoxShadow>[
+                        BoxShadow(color: color, blurRadius: 7),
+                      ],
                     ),
-                  )
-                  .toList(),
-            ),
-          ],
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      category,
+                      style: const TextStyle(
+                        color: Color(0xFFA99A8A),
+                        fontSize: 9,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 0.8,
+                      ),
+                    ),
+                  ),
+                  _FeatureAvailablePill(color: color),
+                ],
+              ),
+              const SizedBox(height: 15),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: <Widget>[
+                  Container(
+                    width: 48,
+                    height: 48,
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: <Color>[
+                          color.withValues(alpha: 0.28),
+                          const Color(0x471B1712),
+                        ],
+                      ),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: color.withValues(alpha: 0.28)),
+                    ),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: <Widget>[
+                        Icon(icon, color: color, size: 24),
+                        const SizedBox(height: 1),
+                        Text(
+                          iconLabel,
+                          style: TextStyle(
+                            color: color,
+                            fontSize: 6,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 13),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        Text(
+                          title,
+                          style: const TextStyle(
+                            color: XLabPalette.primaryText,
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 5),
+                        Text(
+                          subtitle,
+                          maxLines: 2,
+                          style: const TextStyle(
+                            color: Color(0xFF81786F),
+                            fontSize: 10,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Container(
+                    width: 58,
+                    height: 34,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: color,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Text(
+                      '进入',
+                      style: TextStyle(
+                        color: Color(0xFF08110E),
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              Wrap(
+                spacing: 7,
+                runSpacing: 7,
+                children: tags
+                    .map(
+                      (tag) => _FeatureTag(
+                        tag,
+                        color: color,
+                        highlighted: tag == tags.last,
+                      ),
+                    )
+                    .toList(),
+              ),
+            ],
+          ),
         ),
       ],
+    ),
+  );
+}
+
+final class _FeatureAvailablePill extends StatelessWidget {
+  const _FeatureAvailablePill({required this.color});
+
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    height: 25,
+    alignment: Alignment.center,
+    padding: const EdgeInsets.symmetric(horizontal: 10),
+    decoration: BoxDecoration(
+      color: const Color(0x0CFFFFFF),
+      borderRadius: BorderRadius.circular(12.5),
+      border: Border.all(color: const Color(0x2EFFFFFF)),
+    ),
+    child: Text(
+      'AVAILABLE',
+      style: TextStyle(
+        color: color,
+        fontSize: 8,
+        fontWeight: FontWeight.bold,
+        letterSpacing: 0.7,
+      ),
+    ),
+  );
+}
+
+final class _FeatureTag extends StatelessWidget {
+  const _FeatureTag(
+    this.text, {
+    required this.color,
+    required this.highlighted,
+  });
+
+  final String text;
+  final Color color;
+  final bool highlighted;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    height: 24,
+    padding: const EdgeInsets.symmetric(horizontal: 9),
+    decoration: BoxDecoration(
+      color: highlighted ? const Color(0x12FFFFFF) : const Color(0x66080C12),
+      borderRadius: BorderRadius.circular(8),
+      border: Border.all(color: const Color(0x17FFFFFF)),
+    ),
+    child: Center(
+      widthFactor: 1,
+      child: Text(
+        text,
+        style: TextStyle(
+          color: highlighted ? color : const Color(0xFFA89A8B),
+          fontSize: 7,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
     ),
   );
 }
