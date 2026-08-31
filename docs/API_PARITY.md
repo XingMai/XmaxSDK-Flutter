@@ -36,7 +36,6 @@
 | `async throws -> Void` | `Future<void>` | 抛出 `XmaxError` |
 | `async throws -> T` | `Future<T>` | 抛出 `XmaxError` |
 | `@MainActor` | Flutter UI isolate | listener 和渲染回调 |
-| SwiftUI View | Flutter Widget | `XmaxVideo` |
 | UIKit UIView | Flutter StatefulWidget | `XmaxVideoView` |
 
 ## 3. 首版公开入口
@@ -53,7 +52,7 @@ Flutter：
 
 ```dart
 abstract final class XmaxSDKInfo {
-  static const String version = '1.0.0';
+  static const String version = '1.0.1';
 }
 ```
 
@@ -635,25 +634,6 @@ final class XmaxError implements Exception {
 已有 `XmaxError` 原样返回；其他异常默认映射为 `internalError`，已知网络、RTC、权限和 COS 异常在各自边界先映射为对应错误码。
 
 ## 14. 视频 Widget
-
-### XmaxVideo
-
-Flutter 契约：
-
-```dart
-class XmaxVideo extends StatelessWidget {
-  const XmaxVideo({
-    super.key,
-    required this.track,
-    this.videoContentMode = VideoContentMode.fill,
-    this.isInteractionEnabled = true,
-  });
-
-  final RealtimeVideoTrack? track;
-  final VideoContentMode videoContentMode;
-  final bool isInteractionEnabled;
-}
-```
 
 ### XmaxVideoView
 

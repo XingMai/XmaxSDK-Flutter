@@ -7,4 +7,4 @@ fvm flutter pub get
 fvm flutter run
 ```
 
-API Key 只在当前进程内使用，不写入仓库。首版 Example 仅展示摄像头实时生成、轨迹渲染和独立 Storage 能力。
+API Key 仅通过系统偏好保存在本机，不写入仓库。Example 展示摄像头实时生成、默认/自定义轨迹渲染和独立 Storage 能力。

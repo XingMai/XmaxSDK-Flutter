@@ -2,7 +2,7 @@
 
 ## 1. 结论
 
-第一步先完成本地 Flutter 环境、XmaxSDK Package 和 `example/` 工程的整体建立，然后再实现 RTC、COS 和业务 API。
+本地 Flutter 环境、XmaxSDK Package、`example/` 工程、RTC、COS 和业务 API 已完成整体建立。
 
 根工程使用 Flutter `package` 模板，不使用 `plugin` 模板。XmaxSDK Flutter 自身不编写 Swift、Objective-C、Java 或 Kotlin 平台实现，只依赖火山 RTC 和腾讯 COS 已提供的 Flutter Plugin；因此没有必要生成 Xmax 自有的 Platform Channel 和空原生插件类。[Flutter 官方文档](https://docs.flutter.dev/packages-and-plugins/developing-packages)也将“仅依赖其他插件并提供 Dart API”的工程归为普通 Package。
 
@@ -98,7 +98,7 @@ Flutter/
 ```yaml
 name: xmax_sdk
 description: Xmax SDK for Flutter.
-version: 1.0.0
+version: 1.0.1
 publish_to: none
 
 environment:
@@ -108,6 +108,7 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  permission_handler: 12.0.3
   volc_engine_rtc: 3.60.6
   tencentcloud_cos_sdk_plugin_nobeacon: 1.2.9
 
@@ -180,13 +181,13 @@ Flutter Example 对齐 iOS XLab 的用户路径和视觉语义，但只展示 Fl
 - “存储服务”入口。
 - 未支持的图片/视频 RTC 管线不显示为可点击卡片。
 
-API Key 初期只保存在 Example 进程内；需要对齐 XLab 的重启保留体验时，可在 Example 层增加安全存储。即使通过 `--dart-define` 注入，也不能把客户端内的 Key 当作不可提取的生产密钥。
+API Key 通过 Example 层的系统偏好存储保留，行为与 XLab 一致；它不会写入仓库。客户端内的 Key 不能被视作不可提取的生产密钥。
 
 ### 7.2 摄像头实时页 `RealtimePage`
 
 页面展示：
 
-- 一个 `XmaxVideo`，先显示本地摄像头 track，生成开始后切换远端 track。
+- 一个 `XmaxVideoView`，先显示本地摄像头 track，生成开始后切换远端 track。
 - 当前 `RealtimeState` 和 `RealtimeConnectionState`。
 - 网络质量、性能告警和最近一次错误。
 - Prompt 输入和生成开始/更新/停止按钮。
@@ -203,14 +204,14 @@ initState
   → createRealtimeManager
   → 注册 listeners
   → createLocalCameraStream
-  → XmaxVideo(local track)
+  → XmaxVideoView(local track)
 
 用户连接
   → connect(localStream)
 
 用户生成
   → startGeneration(context)
-  → XmaxVideo(remote track)
+  → XmaxVideoView(remote track)
 
 dispose
   → 移除 listeners
@@ -227,7 +228,7 @@ dispose
 - 选择图片或视频文件。
 - 展示文件名、大小和 Content-Type。
 - 普通上传；图片可演示安全检测上传。
-- 展示进度、取消、成功 URL 和错误。
+- 展示进度、成功 URL 和错误。
 - 使用 URL 下载并展示本地结果。
 - 只能通过 `XmaxClient.createStorageManager()` 使用 COS 能力。
 

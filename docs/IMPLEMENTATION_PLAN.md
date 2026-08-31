@@ -14,7 +14,7 @@
 
 - `../../iOS/XmaxSDK/Sources/XmaxSDK`
 - iOS SDK 版本：`1.0.1`
-- Flutter 首版目标版本：`1.0.0`
+- Flutter 摄像头版版本：`1.0.1`
 
 ## 2. 已确认决策
 
@@ -51,7 +51,7 @@
 - 房间消息和 SEI 接收。
 - 网络质量、性能告警和 RTC 统计。
 - Flutter 轨迹采集、坐标转换、信令发送和效果渲染。
-- COS 临时凭证、上传、下载、进度和取消。
+- COS 临时凭证、上传、下载和进度。
 - Example App、单元测试和 iOS/Android 真机集成测试。
 
 ### 3.2 不包含
@@ -95,6 +95,7 @@
 dependencies:
   flutter:
     sdk: flutter
+  permission_handler: 12.0.3
   volc_engine_rtc: 3.60.6
   tencentcloud_cos_sdk_plugin_nobeacon: 1.2.9
 ```
@@ -227,7 +228,6 @@ RTC 房间和流协调层，对齐 iOS：
 - `RenderController`
 - `VideoRenderRegistry`
 - `VideoRenderBinding`
-- `XmaxVideo`
 - `XmaxVideoView`
 - Trajectory 相关类型。
 
@@ -405,15 +405,14 @@ Flutter `AppLifecycleState` 只作为内部资源保护信号，不改变 iOS �
 
 ### 8.1 Widget
 
-- `XmaxVideo`：面向接入方的便捷 Widget。
-- `XmaxVideoView`：实际绑定视频轨道和轨迹层的 StatefulWidget。
+- `XmaxVideoView`：绑定视频轨道和轨迹层的 StatefulWidget。
 
-两者公开配置与 iOS 一致：
+公开配置与 iOS UIKit API 一致：
 
 - `track`
 - `videoContentMode`
 - `isInteractionEnabled`
-- `trajectoryRenderer`（仅 `XmaxVideoView`）
+- `trajectoryRenderer`
 
 ### 8.2 视图组成
 
@@ -461,7 +460,6 @@ uploadImage/uploadVideo
 - 临时凭证不写日志、不持久化。
 - 日志必须脱敏 Authorization、Token、Secret 和完整响应。
 - 默认 HTTPS。
-- 取消上传映射为 `XmaxErrorCode.cancelled`。
 - 图片安全检查失败映射为 `unsafeImage`。
 - COS 客户端错误和服务端错误统一映射为 `uploadError` 或 `downloadError`。
 
@@ -589,7 +587,7 @@ SDK 负责检查和请求运行时权限；宿主负责平台用途说明和最�
 ### 阶段 4：Render 与 Interaction
 
 - `VideoRenderRegistry` 和 binding。
-- `XmaxVideo`、`XmaxVideoView`。
+- `XmaxVideoView`。
 - Flutter trajectory overlay 和默认效果。
 - `RenderController` 远端首帧等待。
 
@@ -617,12 +615,12 @@ SDK 负责检查和请求运行时权限；宿主负责平台用途说明和最�
 
 - COS 临时凭证和客户端配置。
 - 图片/视频上传下载。
-- 进度、取消和安全检查。
+- 进度和安全检查。
 
 验收：
 
 - 字节和本地文件两种上传来源。
-- 临时凭证过期、403、网络中断和主动取消错误正确。
+- 临时凭证过期、403 和网络中断错误正确。
 - 上传结果 URL、objectKey 和 etag 正确。
 
 ### 阶段 7：发布准备
@@ -655,7 +653,7 @@ SDK 负责检查和请求运行时权限；宿主负责平台用途说明和最�
 
 ### Widget 测试
 
-- `XmaxVideo` 默认参数。
+- `XmaxVideoView` 默认参数。
 - track 更新和置空。
 - `fit`/`fill` 布局。
 - interaction 开关。
