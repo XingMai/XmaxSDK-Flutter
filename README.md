@@ -253,18 +253,6 @@ rear cameras without rebuilding the manager:
 final switchedStream = await realtime.switchCamera();
 ```
 
-### Preview the input
-
-Bind the local track to `XmaxVideoView`. Disable interaction for a local preview:
-
-```dart
-XmaxVideoView(
-  track: localStream.videoTrack,
-  videoContentMode: VideoContentMode.fill,
-  isInteractionEnabled: false,
-)
-```
-
 ### Start generation
 
 Construct a `RealtimeContext` with a prompt and, when applicable, a remote
@@ -280,12 +268,37 @@ final remoteStream = await realtime.startGeneration(
 );
 ```
 
-Render the generated output with the same widget:
+For the standard full-screen realtime experience, keep both tracks in the
+recommended `XmaxRealtimeVideoView`:
 
 ```dart
-XmaxVideoView(
-  track: remoteStream?.videoTrack,
+XmaxRealtimeVideoView(
+  localTrack: localStream.videoTrack,
+  remoteTrack: remoteStream?.videoTrack,
   videoContentMode: VideoContentMode.fill,
+)
+```
+
+It retains the local preview underneath the generated video, fades the remote
+track in when its RTC binding is ready, and automatically returns to the local
+preview after `stopGeneration()` or `disconnect()`. This avoids black frames
+during native video-view handoff.
+
+Use separate `XmaxVideoView` widgets only when the application needs custom
+composition such as picture-in-picture:
+
+```dart
+Stack(
+  children: [
+    XmaxVideoView(track: localStream.videoTrack),
+    Positioned(
+      right: 16,
+      top: 16,
+      width: 120,
+      height: 180,
+      child: XmaxVideoView(track: remoteStream?.videoTrack),
+    ),
+  ],
 )
 ```
 
@@ -317,16 +330,17 @@ the host page is disposed or the application enters the background.
 
 ## Touch Interaction
 
-During an active generation task, `XmaxVideoView` captures multi-touch trajectories
-over the generated video, converts them into video coordinates, and submits them to
-the active task. Trajectory interaction and the default visual effect are enabled
-by default.
+During an active generation task, `XmaxRealtimeVideoView` captures multi-touch
+trajectories over its visible generated video, converts them into video
+coordinates, and submits them to the active task. Trajectory interaction and the
+default visual effect are enabled by default.
 
 Disable interaction when touch input belongs to the surrounding interface:
 
 ```dart
-XmaxVideoView(
-  track: remoteStream?.videoTrack,
+XmaxRealtimeVideoView(
+  localTrack: localStream.videoTrack,
+  remoteTrack: remoteStream?.videoTrack,
   isInteractionEnabled: false,
 )
 ```
@@ -335,8 +349,9 @@ Provide a `TrajectoryEffectRendering` implementation to customize the local touc
 effect:
 
 ```dart
-XmaxVideoView(
-  track: remoteStream?.videoTrack,
+XmaxRealtimeVideoView(
+  localTrack: localStream.videoTrack,
+  remoteTrack: remoteStream?.videoTrack,
   trajectoryRenderer: customTrajectoryRenderer,
 )
 ```

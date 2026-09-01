@@ -46,7 +46,9 @@ final class RenderController implements RenderControlling {
     if (track != null) {
       VideoRenderRegistry.register(
         track,
-        stream == null ? null : RemoteVideoRenderBinding(stream),
+        stream == null
+            ? null
+            : RemoteVideoRenderBinding(stream, isFrameReady: _remoteFrameReady),
       );
     }
   }
@@ -60,6 +62,14 @@ final class RenderController implements RenderControlling {
     }
 
     _remoteFrameReady = true;
+
+    final track = _remoteTrack;
+    if (track != null) {
+      VideoRenderRegistry.register(
+        track,
+        RemoteVideoRenderBinding(stream, isFrameReady: true),
+      );
+    }
 
     final completer = _remoteFrameCompleter;
     _remoteFrameCompleter = null;

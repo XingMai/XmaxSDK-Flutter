@@ -161,12 +161,12 @@ class _RealtimePageState extends State<RealtimePage>
         localStream: generating ? null : localStream,
         context: context,
       );
-      if (mounted) {
-        setState(() {
-          if (remote != null) _remoteStream = remote;
-          _isLoading = false;
-        });
-      }
+
+      if (!mounted) return;
+      setState(() {
+        if (remote != null) _remoteStream = remote;
+        _isLoading = false;
+      });
     } catch (error) {
       _showError(error);
       if (mounted) setState(() => _isLoading = false);
@@ -376,14 +376,16 @@ class _RealtimePageState extends State<RealtimePage>
         _state.connectionState == RealtimeConnectionState.generating;
     setState(() {
       _busy = true;
-      if (wasGenerating) _isLoading = true;
+      if (wasGenerating) {
+        _isLoading = true;
+      }
     });
     try {
       final stream = await _manager.switchCamera();
       if (mounted) {
         setState(() {
           _localStream = stream;
-          _isLoading = !_cameraReady;
+          _isLoading = wasGenerating ? false : !_cameraReady;
         });
       }
     } catch (error) {
@@ -444,7 +446,6 @@ class _RealtimePageState extends State<RealtimePage>
   Widget build(BuildContext context) {
     final generating =
         _state.connectionState == RealtimeConnectionState.generating;
-    final displayed = generating ? _remoteStream : _localStream;
     return Scaffold(
       resizeToAvoidBottomInset: true,
       backgroundColor: const Color(0xFF101010),
@@ -470,16 +471,16 @@ class _RealtimePageState extends State<RealtimePage>
                         ),
                       ),
                     ),
-                    if (displayed?.videoTrack != null)
-                      XmaxVideoView(
-                        track: displayed!.videoTrack,
-                        videoContentMode: VideoContentMode.fill,
-                        isInteractionEnabled:
-                            generating &&
-                            _panelMode == XLabRealtimePanelMode.touch,
-                        trajectoryRenderer: _customRenderer,
-                      )
-                    else
+                    XmaxRealtimeVideoView(
+                      localTrack: _localStream?.videoTrack,
+                      remoteTrack: _remoteStream?.videoTrack,
+                      videoContentMode: VideoContentMode.fill,
+                      isInteractionEnabled:
+                          generating &&
+                          _panelMode == XLabRealtimePanelMode.touch,
+                      trajectoryRenderer: _customRenderer,
+                    ),
+                    if (_localStream?.videoTrack == null)
                       const Center(
                         child: Icon(
                           Icons.videocam_off_outlined,

@@ -27,5 +27,6 @@ export 'src/service/realtime/RealtimeVideoTrack.dart'
 export 'src/render/trajectory/DefaultTrajectoryEffectRenderer.dart';
 export 'src/render/trajectory/TrajectoryEffectRendering.dart'
     show TrajectoryEffectRendering, TrajectoryID, TrajectoryPoint;
+export 'src/render/video/XmaxRealtimeVideoView.dart';
 export 'src/render/video/XmaxVideoView.dart';
 export 'src/XmaxSDKInfo.dart';

@@ -9,7 +9,8 @@ final class LocalVideoRenderBinding extends VideoRenderBinding {
 }
 
 final class RemoteVideoRenderBinding extends VideoRenderBinding {
-  const RemoteVideoRenderBinding(this.stream);
+  const RemoteVideoRenderBinding(this.stream, {this.isFrameReady = false});
 
   final RemoteStream stream;
+  final bool isFrameReady;
 }
