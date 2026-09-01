@@ -8,7 +8,5 @@ abstract interface class RenderControlling {
     RealtimeVideoTrack track, {
     required void Function(InteractionFrame frame) interactionListener,
   });
-  void notifyRemoteFrameReady(RemoteStream stream);
-  Future<void> waitUntilRemoteFrameReady();
   void resetRemoteTrack(RealtimeVideoTrack? track);
 }

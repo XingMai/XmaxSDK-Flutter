@@ -22,17 +22,28 @@ and interactive image animation directly into their apps.
 
 ## Features
 
-- Real-time video generation from the front or rear camera, guided by prompts,
-  reference images, and user interactions
-- In-application rendering of the local camera and remotely generated output
+- Front and rear camera capture as the local RTC input
+- Camera-based real-time generation controlled by prompts, remote reference
+  URLs, and user interactions
+- Automatic local-preview and generated-output switching with
+  `XmaxRealtimeVideoView`
 - Multi-touch trajectory input with built-in and custom effect renderers
-- Realtime connection state, error, network-quality, and performance listeners
-- Image and video upload or download through Xmax-managed object storage
-- Image safety checks and transfer progress callbacks
+- Camera switching during preview and active generation
+- Realtime state, error, network-quality, and performance listeners
+- Independent Xmax-managed object storage with safety checks and transfer
+  progress callbacks
 - A shared asynchronous Dart API for iOS and Android
 
-This camera-focused release does not provide local image or local video files as
-RTC input, video frame interpolation, or platform-specific SwiftUI APIs.
+### Not included in this release
+
+- Local image files as RTC media input
+- Local video files as RTC media input
+- Raw video-frame pipelines or video-frame interpolation
+- Platform-specific SwiftUI APIs
+
+Object storage is an independent file service. Uploading a local file does not
+turn that file into an RTC media stream. A generated task may use a supported
+remote reference URL through `RealtimeContext.referencePath`.
 
 ## Requirements
 
@@ -357,12 +368,13 @@ XmaxRealtimeVideoView(
 ```
 
 The runnable custom implementation is in
-[`example/lib/features/realtime/realtime_page.dart`](example/lib/features/realtime/realtime_page.dart).
+[`example/lib/features/realtime/xlab_trajectory_renderer.dart`](example/lib/features/realtime/xlab_trajectory_renderer.dart).
 
 ## Reference Image Upload
 
-`RealtimeContext.referencePath` requires a remote image URL. Upload an on-device
-image through the storage manager before starting generation:
+`RealtimeContext.referencePath` accepts a supported remote reference-image URL.
+An on-device image can first be uploaded through the storage manager; it remains
+a generation condition and is not used as the local RTC input:
 
 ```dart
 final storage = client.createStorageManager();

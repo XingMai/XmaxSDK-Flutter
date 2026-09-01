@@ -118,10 +118,14 @@ final class CameraController {
         ? CameraPosition.back
         : CameraPosition.front;
 
-    await _rtcManager.switchCamera(position: next);
-    updateRealtimeVideoTrack(track: track, position: next);
+    try {
+      await _rtcManager.switchCamera(position: next);
+      updateRealtimeVideoTrack(track: track, position: next);
 
-    return createRealtimeMediaStream(id: localStreamID, videoTrack: track);
+      return createRealtimeMediaStream(id: localStreamID, videoTrack: track);
+    } catch (error) {
+      throw XmaxError.from(error);
+    }
   }
 
   RealtimeVideoFormat _resolveVideoFormat(RealtimeVideoFormat videoFormat) {

@@ -22,7 +22,6 @@ import 'room/RoomControlling.dart';
 import 'StreamControlling.dart';
 
 typedef RemoteStreamListener = void Function(RemoteStream? stream);
-typedef RemoteFrameReadyListener = void Function(RemoteStream stream);
 
 final class StreamController implements StreamControlling {
   StreamController({
@@ -32,7 +31,6 @@ final class StreamController implements StreamControlling {
     QualityControlling? qualityController,
     RealtimeErrorListener? errorListener,
     RemoteStreamListener? remoteStreamListener,
-    RemoteFrameReadyListener? remoteFrameReadyListener,
     this.generationTimeout = const Duration(seconds: 15),
   }) : _rtcManager = rtcManager,
        _roomController =
@@ -41,13 +39,11 @@ final class StreamController implements StreamControlling {
            encodingController ?? EncodingController(rtcManager: rtcManager),
        _qualityController = qualityController ?? QualityController(),
        _errorListener = errorListener,
-       _remoteStreamListener = remoteStreamListener,
-       _remoteFrameReadyListener = remoteFrameReadyListener {
+       _remoteStreamListener = remoteStreamListener {
     rtcManager.setEventListener(
       RtcEventListener(
         onRemoteVideoPublished: _onRemoteVideoPublished,
         onSEIMessageReceived: _onSEIMessageReceived,
-        onFirstRemoteVideoFrameDecoded: _onFirstRemoteVideoFrameDecoded,
         onError: _onError,
         onNetworkQuality: _qualityController.emitNetworkQuality,
         onPerformanceAlarm: _qualityController.emitPerformanceAlarm,
@@ -61,7 +57,6 @@ final class StreamController implements StreamControlling {
   final QualityControlling _qualityController;
   final RealtimeErrorListener? _errorListener;
   final RemoteStreamListener? _remoteStreamListener;
-  final RemoteFrameReadyListener? _remoteFrameReadyListener;
   final Duration generationTimeout;
 
   String _roomID = '';
@@ -358,14 +353,6 @@ final class StreamController implements StreamControlling {
     _generationTimer = null;
     _generationCompleter = null;
     completer.complete();
-  }
-
-  void _onFirstRemoteVideoFrameDecoded(RemoteStream stream) {
-    // Forward decoded frames before SEI as well. RenderController caches them
-    // and applies readiness when the matching SEI later selects the stream.
-    if (_isExpectedRemote(stream)) {
-      _remoteFrameReadyListener?.call(stream);
-    }
   }
 
   void _onError(Object error) {

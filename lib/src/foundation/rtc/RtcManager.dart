@@ -134,6 +134,16 @@ final class RtcManager implements RtcManaging {
       ),
       'switchCamera',
     );
+    if (Platform.isIOS) {
+      await _check(
+        _engine.setVideoCaptureRotation(
+          _requiresBackCameraRotation(position)
+              ? VideoRotation.rotation180
+              : VideoRotation.rotation0,
+        ),
+        'setVideoCaptureRotation',
+      );
+    }
     await _check(
       _engine.setLocalVideoMirrorType(
         position == CameraPosition.front
@@ -142,6 +152,16 @@ final class RtcManager implements RtcManaging {
       ),
       'setLocalVideoMirrorType',
     );
+  }
+
+  bool _requiresBackCameraRotation(CameraPosition position) {
+    if (position != CameraPosition.back) return false;
+
+    final version = RegExp(
+      r'Version\s+(\d+)',
+    ).firstMatch(Platform.operatingSystemVersion);
+    final majorVersion = int.tryParse(version?.group(1) ?? '');
+    return majorVersion != null && majorVersion >= 27;
   }
 
   @override
@@ -352,11 +372,6 @@ final class RtcManager implements RtcManaging {
     },
     onFirstLocalVideoFrameCaptured: (_, _) {
       _cameraPreviewReadyListener?.call();
-    },
-    onFirstRemoteVideoFrameDecoded: (streamID, info, _) {
-      _eventListener?.onFirstRemoteVideoFrameDecoded?.call(
-        _remoteStream(streamID, info),
-      );
     },
     onSEIMessageReceived: (streamID, info, Uint8List message) {
       _eventListener?.onSEIMessageReceived?.call(

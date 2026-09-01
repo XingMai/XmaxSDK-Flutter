@@ -1,6 +1,7 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xmax_sdk/src/foundation/media/camera/CameraPosition.dart';
+import 'package:xmax_sdk/src/foundation/errors/XmaxError.dart';
 import 'package:xmax_sdk/src/foundation/permissions/PermissionManaging.dart';
 import 'package:xmax_sdk/src/foundation/rtc/RtcEventListener.dart';
 import 'package:xmax_sdk/src/foundation/rtc/RtcManaging.dart';
@@ -40,6 +41,39 @@ void main() {
     expect(readyCount, 2);
     await camera.stopLocalCameraStream();
   });
+
+  test(
+    'camera switch normalizes RTC failures and preserves position',
+    () async {
+      final rtc = _FakeRtc();
+      final camera = CameraController(
+        rtcManager: rtc,
+        permissionManager: const _AllowedPermissions(),
+        mediaService: const _IdentityMediaService(),
+      );
+      final stream = await camera.createLocalCameraStream(
+        videoFormat: const RealtimeVideoFormat(
+          width: 832,
+          height: 1472,
+          fps: 24,
+        ),
+        position: CameraPosition.front,
+      );
+      rtc.switchError = StateError('native switch failed');
+
+      await expectLater(
+        camera.switchCamera(),
+        throwsA(
+          isA<XmaxError>().having(
+            (error) => error.code,
+            'code',
+            XmaxErrorCode.internalError,
+          ),
+        ),
+      );
+      expect(stream.videoTrack?.position, CameraPosition.front);
+    },
+  );
 }
 
 final class _AllowedPermissions implements PermissionManaging {
@@ -61,6 +95,7 @@ final class _IdentityMediaService implements MediaServicing {
 
 final class _FakeRtc implements RtcManaging {
   void Function()? previewReadyListener;
+  Object? switchError;
 
   void notifyPreviewReady() => previewReadyListener?.call();
 
@@ -124,5 +159,8 @@ final class _FakeRtc implements RtcManaging {
   }) async {}
 
   @override
-  Future<void> switchCamera({required CameraPosition position}) async {}
+  Future<void> switchCamera({required CameraPosition position}) async {
+    final error = switchError;
+    if (error != null) throw error;
+  }
 }

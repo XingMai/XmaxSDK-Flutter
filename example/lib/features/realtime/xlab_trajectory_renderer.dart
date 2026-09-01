@@ -2,34 +2,41 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:xmax_sdk/XmaxSDK.dart';
 
-import 'TrajectoryEffectRendering.dart';
-
-/// SDK 内置的白色核心、绿色发光轨迹效果。
-final class DefaultTrajectoryEffectRenderer extends ChangeNotifier
+/// XLab 自定义轨迹效果，以粉、蓝双色区分多指轨迹。
+final class XLabTrajectoryRenderer extends ChangeNotifier
     implements TrajectoryEffectRendering {
   static const _fadeFactor = 0.93;
   static const _idleFadeFrameLimit = 48;
   static const _activeTrailFrameLimit = 66;
+  static const _palette = <_TrajectoryColors>[
+    _TrajectoryColors(core: Color(0xFFFFE6FA), glow: Color(0xFFFF2EB8)),
+    _TrajectoryColors(core: Color(0xFFE6FAFF), glow: Color(0xFF24BDFF)),
+  ];
 
   final Map<TrajectoryID, _Trajectory> _trajectories =
       <TrajectoryID, _Trajectory>{};
   late final Ticker _animationTicker = Ticker(_tick);
   int _frameIndex = 0;
+  int _nextPaletteIndex = 0;
 
   @override
   Widget get view => CustomPaint(
-    painter: _TrajectoryPainter(renderer: this),
+    painter: _XLabTrajectoryPainter(renderer: this),
     size: Size.infinite,
   );
 
   @override
   void renderBegan(List<TrajectoryPoint> points) {
     for (final point in points) {
+      final paletteIndex = _nextPaletteIndex % _palette.length;
+      _nextPaletteIndex += 1;
       _trajectories[point.id] = _Trajectory(
         location: point.location,
         startTime: point.timestamp,
         frameIndex: _frameIndex,
+        paletteIndex: paletteIndex,
       );
     }
 
@@ -42,10 +49,13 @@ final class DefaultTrajectoryEffectRenderer extends ChangeNotifier
     for (final point in points) {
       final trajectory = _trajectories[point.id];
       if (trajectory == null) {
+        final paletteIndex = _nextPaletteIndex % _palette.length;
+        _nextPaletteIndex += 1;
         _trajectories[point.id] = _Trajectory(
           location: point.location,
           startTime: point.timestamp,
           frameIndex: _frameIndex,
+          paletteIndex: paletteIndex,
         );
         continue;
       }
@@ -76,6 +86,7 @@ final class DefaultTrajectoryEffectRenderer extends ChangeNotifier
   void reset() {
     _trajectories.clear();
     _frameIndex = 0;
+    _nextPaletteIndex = 0;
     _animationTicker.stop();
     notifyListeners();
   }
@@ -93,17 +104,15 @@ final class DefaultTrajectoryEffectRenderer extends ChangeNotifier
   }
 
   void _tick(Duration elapsed) {
-    // iOS explicitly renders the fading bitmap at 60 fps. Use elapsed time
-    // instead of the device refresh count so 90/120 Hz screens do not make
-    // the trail disappear proportionally faster.
+    // Match the 60 fps fade cadence used by the iOS renderer even when the
+    // Flutter view is hosted on a 90/120 Hz display.
     _frameIndex = elapsed.inMicroseconds * 60 ~/ Duration.microsecondsPerSecond;
-
     _trajectories.removeWhere((_, trajectory) {
       if (!trajectory.isActive) {
         return _frameIndex - trajectory.endFrame! > _idleFadeFrameLimit;
       }
 
-      // Keep one preceding node so the oldest visible segment remains joined.
+      // Retain one predecessor so the oldest visible segment remains joined.
       while (trajectory.nodes.length > 2 &&
           _frameIndex - trajectory.nodes[1].frameIndex >
               _activeTrailFrameLimit) {
@@ -125,11 +134,13 @@ final class _Trajectory {
     required Offset location,
     required this.startTime,
     required int frameIndex,
+    required this.paletteIndex,
   }) : nodes = <_TrailNode>[
          _TrailNode(location: location, frameIndex: frameIndex),
        ];
 
   final Duration startTime;
+  final int paletteIndex;
   final List<_TrailNode> nodes;
   bool isActive = true;
   int? endFrame;
@@ -157,19 +168,30 @@ final class _TrailNode {
   final int frameIndex;
 }
 
-final class _TrajectoryPainter extends CustomPainter {
-  _TrajectoryPainter({required this.renderer}) : super(repaint: renderer);
+final class _TrajectoryColors {
+  const _TrajectoryColors({required this.core, required this.glow});
 
-  static const _coreColor = Colors.white;
-  static const _glowColor = Color(0xFF00FF64);
-  static const _coreWidth = 6.0;
-  static const _glowWidth = 18.0;
+  final Color core;
+  final Color glow;
+}
+
+final class _XLabTrajectoryPainter extends CustomPainter {
+  _XLabTrajectoryPainter({required this.renderer}) : super(repaint: renderer);
+
   static const _cohortFrameSpan = 6;
   static const _cohortCount = 12;
+  static const _coreWidth = 6.0;
+  static const _glowWidth = 18.0;
 
-  final DefaultTrajectoryEffectRenderer renderer;
-  final List<Path> _paths = List<Path>.generate(_cohortCount, (_) => Path());
-  final List<int?> _cohortIDs = List<int?>.filled(_cohortCount, null);
+  final XLabTrajectoryRenderer renderer;
+  final List<List<Path>> _paths = List<List<Path>>.generate(
+    XLabTrajectoryRenderer._palette.length,
+    (_) => List<Path>.generate(_cohortCount, (_) => Path()),
+  );
+  final List<List<int?>> _cohortIDs = List<List<int?>>.generate(
+    XLabTrajectoryRenderer._palette.length,
+    (_) => List<int?>.filled(_cohortCount, null),
+  );
   final Paint _outerGlowPaint = Paint()
     ..strokeWidth = _glowWidth
     ..strokeCap = StrokeCap.round
@@ -195,53 +217,68 @@ final class _TrajectoryPainter extends CustomPainter {
     ..strokeWidth = 2
     ..style = PaintingStyle.stroke
     ..blendMode = BlendMode.plus;
-  final Paint _headCorePaint = Paint()
-    ..color = _coreColor
-    ..blendMode = BlendMode.plus;
+  final Paint _headCorePaint = Paint()..blendMode = BlendMode.plus;
 
   @override
   void paint(Canvas canvas, Size size) {
-    // Keep each segment in a stable time cohort for its whole lifetime.
-    // Reassigning segments between opacity buckets creates a visible flowing
-    // pattern because additive overlap changes at every bucket boundary.
-    for (var index = 0; index < _cohortCount; index += 1) {
-      _paths[index].reset();
-      _cohortIDs[index] = null;
+    for (
+      var paletteIndex = 0;
+      paletteIndex < XLabTrajectoryRenderer._palette.length;
+      paletteIndex += 1
+    ) {
+      for (var cohortSlot = 0; cohortSlot < _cohortCount; cohortSlot += 1) {
+        _paths[paletteIndex][cohortSlot].reset();
+        _cohortIDs[paletteIndex][cohortSlot] = null;
+      }
     }
 
+    // Stable time cohorts preserve additive overlap while fading. Moving a
+    // segment between opacity buckets makes the trail look like it is flowing.
     for (final trajectory in renderer._trajectories.values) {
       for (var index = 1; index < trajectory.nodes.length; index += 1) {
         final start = trajectory.nodes[index - 1];
         final end = trajectory.nodes[index];
         final age = renderer._frameIndex - end.frameIndex;
         final opacity = math
-            .pow(DefaultTrajectoryEffectRenderer._fadeFactor, age)
+            .pow(XLabTrajectoryRenderer._fadeFactor, age)
             .toDouble();
         if (opacity < 0.01) continue;
 
         final cohortID = end.frameIndex ~/ _cohortFrameSpan;
         final cohortSlot = cohortID % _cohortCount;
-        if (_cohortIDs[cohortSlot] != cohortID) {
-          _paths[cohortSlot].reset();
-          _cohortIDs[cohortSlot] = cohortID;
+        if (_cohortIDs[trajectory.paletteIndex][cohortSlot] != cohortID) {
+          _paths[trajectory.paletteIndex][cohortSlot].reset();
+          _cohortIDs[trajectory.paletteIndex][cohortSlot] = cohortID;
         }
-        _paths[cohortSlot]
+        _paths[trajectory.paletteIndex][cohortSlot]
           ..moveTo(start.location.dx, start.location.dy)
           ..lineTo(end.location.dx, end.location.dy);
       }
     }
 
-    for (var index = 0; index < _paths.length; index += 1) {
-      final cohortID = _cohortIDs[index];
-      if (cohortID == null) continue;
+    for (
+      var paletteIndex = 0;
+      paletteIndex < XLabTrajectoryRenderer._palette.length;
+      paletteIndex += 1
+    ) {
+      final colors = XLabTrajectoryRenderer._palette[paletteIndex];
+      for (var cohortSlot = 0; cohortSlot < _cohortCount; cohortSlot += 1) {
+        final cohortID = _cohortIDs[paletteIndex][cohortSlot];
+        if (cohortID == null) continue;
 
-      final cohortMiddleFrame =
-          cohortID * _cohortFrameSpan + (_cohortFrameSpan - 1) / 2;
-      final age = math.max(0.0, renderer._frameIndex - cohortMiddleFrame);
-      final opacity = math
-          .pow(DefaultTrajectoryEffectRenderer._fadeFactor, age)
-          .toDouble();
-      _drawTrailPath(canvas, _paths[index], opacity: opacity);
+        final cohortMiddleFrame =
+            cohortID * _cohortFrameSpan + (_cohortFrameSpan - 1) / 2;
+        final age = math.max(0.0, renderer._frameIndex - cohortMiddleFrame);
+        final opacity = math
+            .pow(XLabTrajectoryRenderer._fadeFactor, age)
+            .toDouble();
+        _drawTrailPath(
+          canvas,
+          _paths[paletteIndex][cohortSlot],
+          colors: colors,
+          opacity: opacity,
+        );
+      }
     }
 
     final now = Duration(microseconds: DateTime.now().microsecondsSinceEpoch);
@@ -253,50 +290,69 @@ final class _TrajectoryPainter extends CustomPainter {
         (now - trajectory.startTime).inMicroseconds /
             Duration.microsecondsPerSecond,
       );
-      _drawPulsingRings(canvas, trajectory.location, elapsed);
-      _drawOrbitParticles(canvas, trajectory.location, elapsed);
-      _drawHeadGlow(canvas, trajectory.location);
+      final colors = XLabTrajectoryRenderer._palette[trajectory.paletteIndex];
+      _drawPulsingRings(canvas, trajectory.location, elapsed, colors.glow);
+      _drawOrbitParticles(canvas, trajectory.location, elapsed, colors.glow);
+      _drawHeadGlow(canvas, trajectory.location, colors);
     }
   }
 
-  void _drawTrailPath(Canvas canvas, Path path, {required double opacity}) {
-    _outerGlowPaint.color = _glowColor.withValues(alpha: 0.18 * opacity);
+  void _drawTrailPath(
+    Canvas canvas,
+    Path path, {
+    required _TrajectoryColors colors,
+    required double opacity,
+  }) {
+    _outerGlowPaint.color = colors.glow.withValues(alpha: 0.18 * opacity);
     canvas.drawPath(path, _outerGlowPaint);
 
-    _innerGlowPaint.color = _glowColor.withValues(alpha: 0.44 * opacity);
+    _innerGlowPaint.color = colors.glow.withValues(alpha: 0.44 * opacity);
     canvas.drawPath(path, _innerGlowPaint);
 
-    _trailCorePaint.color = _coreColor.withValues(alpha: 0.72 * opacity);
+    _trailCorePaint.color = colors.core.withValues(alpha: 0.72 * opacity);
     canvas.drawPath(path, _trailCorePaint);
   }
 
-  void _drawHeadGlow(Canvas canvas, Offset point) {
-    const glowRadius = 16.0;
-    final bounds = Rect.fromCircle(center: point, radius: glowRadius);
-    _effectPaint.shader = const RadialGradient(
-      colors: <Color>[Color(0xC200FF64), Color(0x7400FF64), Color(0x0000FF64)],
-      stops: <double>[0, 0.4, 1],
+  void _drawHeadGlow(Canvas canvas, Offset point, _TrajectoryColors colors) {
+    const radius = 16.0;
+    final bounds = Rect.fromCircle(center: point, radius: radius);
+    _effectPaint.shader = RadialGradient(
+      colors: <Color>[
+        colors.glow.withValues(alpha: 0.76),
+        colors.glow.withValues(alpha: 0.456),
+        colors.glow.withValues(alpha: 0),
+      ],
+      stops: const <double>[0, 0.4, 1],
     ).createShader(bounds);
-    canvas.drawCircle(point, glowRadius, _effectPaint);
-    _headCorePaint.color = _coreColor.withValues(alpha: 0.88);
+    canvas.drawCircle(point, radius, _effectPaint);
+
+    _headCorePaint.color = colors.core.withValues(alpha: 0.88);
     canvas.drawCircle(point, 5, _headCorePaint);
   }
 
-  void _drawPulsingRings(Canvas canvas, Offset point, double elapsed) {
+  void _drawPulsingRings(
+    Canvas canvas,
+    Offset point,
+    double elapsed,
+    Color glowColor,
+  ) {
     for (var index = 0; index < 2; index += 1) {
       final indexValue = index.toDouble();
-      final baseRadius = 14 + indexValue * 18;
-      final pulseOffset = elapsed * 1.2 + indexValue * 0.5;
-      final pulse = (math.sin(pulseOffset * math.pi * 2) + 1) / 2;
-      final radius = baseRadius + pulse * 8;
+      final pulse =
+          (math.sin((elapsed * 1.2 + indexValue * 0.5) * math.pi * 2) + 1) / 2;
+      final radius = 14 + indexValue * 18 + pulse * 8;
       final alpha = 0.42 * (1 - indexValue * 0.2) * (0.5 + pulse * 0.5);
-
-      _ringPaint.color = _glowColor.withValues(alpha: alpha);
+      _ringPaint.color = glowColor.withValues(alpha: alpha);
       canvas.drawCircle(point, radius, _ringPaint);
     }
   }
 
-  void _drawOrbitParticles(Canvas canvas, Offset point, double elapsed) {
+  void _drawOrbitParticles(
+    Canvas canvas,
+    Offset point,
+    double elapsed,
+    Color glowColor,
+  ) {
     for (var index = 0; index < 4; index += 1) {
       final indexValue = index.toDouble();
       final direction = index.isEven ? 1.0 : -1.0;
@@ -308,12 +364,11 @@ final class _TrajectoryPainter extends CustomPainter {
       );
       final alpha = 0.5 * (0.6 + math.sin(elapsed * 3 + indexValue) * 0.4);
       final bounds = Rect.fromCircle(center: center, radius: 6);
-
       _effectPaint.shader = RadialGradient(
         colors: <Color>[
-          _glowColor.withValues(alpha: alpha),
-          _glowColor.withValues(alpha: alpha * 0.6),
-          _glowColor.withValues(alpha: 0),
+          glowColor.withValues(alpha: alpha),
+          glowColor.withValues(alpha: alpha * 0.6),
+          glowColor.withValues(alpha: 0),
         ],
         stops: const <double>[0, 0.4, 1],
       ).createShader(bounds);
@@ -322,5 +377,5 @@ final class _TrajectoryPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _TrajectoryPainter oldDelegate) => false;
+  bool shouldRepaint(covariant _XLabTrajectoryPainter oldDelegate) => false;
 }

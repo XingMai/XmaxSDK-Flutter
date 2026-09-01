@@ -1,5 +1,4 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:xmax_sdk/src/foundation/errors/XmaxError.dart';
 import 'package:xmax_sdk/src/foundation/rtc/RtcModels.dart';
 import 'package:xmax_sdk/src/render/RenderController.dart';
 import 'package:xmax_sdk/src/render/video/VideoRenderBinding.dart';
@@ -13,43 +12,28 @@ void main() {
     streamID: 'bot-stream',
   );
 
-  test('decoded frame received before SEI remains ready', () async {
+  test('a selected remote stream is bound immediately', () {
     final controller = RenderController();
+    final track = createRealtimeVideoTrack(id: 'remote-track');
+    controller.registerRemoteTrack(track, interactionListener: (_) {});
+    addTearDown(() => controller.resetRemoteTrack(track));
 
-    controller.notifyRemoteFrameReady(stream);
     controller.setRemoteStream(stream);
 
-    await controller.waitUntilRemoteFrameReady();
+    final binding = VideoRenderRegistry.handleFor(track)?.value;
+    expect(binding, isA<RemoteVideoRenderBinding>());
+    expect((binding as RemoteVideoRenderBinding).stream, stream);
   });
 
-  test('decoded frame resolves a pending readiness waiter', () async {
+  test('clearing the selected remote stream clears its binding', () {
     final controller = RenderController();
     final track = createRealtimeVideoTrack(id: 'remote-track');
     controller.registerRemoteTrack(track, interactionListener: (_) {});
     addTearDown(() => controller.resetRemoteTrack(track));
     controller.setRemoteStream(stream);
 
-    final readiness = controller.waitUntilRemoteFrameReady();
-    controller.notifyRemoteFrameReady(stream);
+    controller.setRemoteStream(null);
 
-    await readiness;
-    final binding = VideoRenderRegistry.handleFor(track)?.value;
-    expect(binding, isA<RemoteVideoRenderBinding>());
-    expect((binding as RemoteVideoRenderBinding).isFrameReady, isTrue);
-  });
-
-  test('waiting without a selected remote stream fails', () async {
-    final controller = RenderController();
-
-    await expectLater(
-      controller.waitUntilRemoteFrameReady(),
-      throwsA(
-        isA<XmaxError>().having(
-          (error) => error.code,
-          'code',
-          XmaxErrorCode.rtcError,
-        ),
-      ),
-    );
+    expect(VideoRenderRegistry.handleFor(track)?.value, isNull);
   });
 }

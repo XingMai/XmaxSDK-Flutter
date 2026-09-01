@@ -5,10 +5,21 @@ import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:xmax_sdk/XmaxSDK.dart';
 
-import '../../ui/xlab_theme.dart';
 import 'realtime_control_panel.dart';
+import 'realtime_camera_switch_transition.dart';
 import 'realtime_loading_overlay.dart';
 import 'realtime_local_input.dart';
+import 'xlab_trajectory_renderer.dart';
+
+/// Resolves the initial generation mode from the media input only.
+///
+/// Rendering customization is intentionally excluded: changing the trajectory
+/// appearance must not change the camera workflow or generation condition.
+XLabRealtimePanelMode initialRealtimePanelMode({
+  required XLabRealtimeLocalInput? localInput,
+}) => localInput is XLabRealtimeImageInput
+    ? XLabRealtimePanelMode.touch
+    : XLabRealtimePanelMode.character;
 
 class RealtimePage extends StatefulWidget {
   const RealtimePage({
@@ -52,6 +63,8 @@ class _RealtimePageState extends State<RealtimePage>
   XLabRealtimeReference? _promptReference;
   bool _cameraReady = false;
   bool _busy = false;
+  bool _isSwitchingCamera = false;
+  bool _isCameraSwitchWaitingForGeneration = false;
   bool _isLoading = true;
   bool _isSuspendedForBackground = false;
   bool _isResumingFromBackground = false;
@@ -60,18 +73,14 @@ class _RealtimePageState extends State<RealtimePage>
   bool _hasScheduledInitialCameraStart = false;
   int _realtimeOperationVersion = 0;
   final _referenceUploadTokens = <String, Object>{};
-  late final _XLabTrajectoryRenderer? _customRenderer = widget.customTrajectory
-      ? _XLabTrajectoryRenderer()
+  late final XLabTrajectoryRenderer? _customRenderer = widget.customTrajectory
+      ? XLabTrajectoryRenderer()
       : null;
 
   @override
   void initState() {
     super.initState();
-    _panelMode = widget.customTrajectory
-        ? XLabRealtimePanelMode.touch
-        : widget.localInput is XLabRealtimeImageInput
-        ? XLabRealtimePanelMode.touch
-        : XLabRealtimePanelMode.character;
+    _panelMode = initialRealtimePanelMode(localInput: widget.localInput);
     if (widget.localInput != null) {
       _isLoading = false;
     }
@@ -145,6 +154,12 @@ class _RealtimePageState extends State<RealtimePage>
       if (!mounted || _isSuspendedForBackground) return;
       setState(() {
         _state = state;
+        if (_isCameraSwitchWaitingForGeneration &&
+            state.connectionState == RealtimeConnectionState.generating) {
+          _isCameraSwitchWaitingForGeneration = false;
+          _isSwitchingCamera = false;
+          _isLoading = false;
+        }
         if (state.connectionState == RealtimeConnectionState.connected &&
             state.taskID == null) {
           _lastError = null;
@@ -467,6 +482,8 @@ class _RealtimePageState extends State<RealtimePage>
         _state.connectionState == RealtimeConnectionState.generating;
     setState(() {
       _busy = true;
+      _isSwitchingCamera = true;
+      _isCameraSwitchWaitingForGeneration = wasGenerating;
       if (wasGenerating) {
         _isLoading = true;
       }
@@ -474,19 +491,22 @@ class _RealtimePageState extends State<RealtimePage>
     try {
       final stream = await _manager.switchCamera();
       if (_isCurrentRealtimeOperation(operation)) {
-        setState(() {
-          _localStream = stream;
-          _isLoading = wasGenerating ? false : !_cameraReady;
-        });
+        setState(() => _localStream = stream);
       }
     } catch (error) {
       if (_isCurrentRealtimeOperation(operation)) {
         _showError(error);
-        setState(() => _isLoading = !_cameraReady);
+        setState(() {
+          _isCameraSwitchWaitingForGeneration = false;
+          _isLoading = !_cameraReady;
+        });
       }
     } finally {
       if (_isCurrentRealtimeOperation(operation)) {
-        setState(() => _busy = false);
+        setState(() {
+          _busy = false;
+          _isSwitchingCamera = false;
+        });
       }
     }
   }
@@ -533,6 +553,8 @@ class _RealtimePageState extends State<RealtimePage>
         _selectedReference = null;
         _cameraReady = false;
         _busy = false;
+        _isSwitchingCamera = false;
+        _isCameraSwitchWaitingForGeneration = false;
         _isLoading = false;
         _lastError = null;
       });
@@ -645,11 +667,14 @@ class _RealtimePageState extends State<RealtimePage>
                           ),
                         ),
                       ),
-                    XmaxRealtimeVideoView(
-                      localTrack: _localStream?.videoTrack,
-                      remoteTrack: _remoteStream?.videoTrack,
-                      videoContentMode: VideoContentMode.fill,
-                      trajectoryRenderer: _customRenderer,
+                    RealtimeCameraSwitchTransition(
+                      active: _isSwitchingCamera,
+                      child: XmaxRealtimeVideoView(
+                        localTrack: _localStream?.videoTrack,
+                        remoteTrack: _remoteStream?.videoTrack,
+                        videoContentMode: VideoContentMode.fill,
+                        trajectoryRenderer: _customRenderer,
+                      ),
                     ),
                     if (_localStream?.videoTrack == null && localImage == null)
                       const Center(
@@ -810,87 +835,4 @@ final class _CameraActionButton extends StatelessWidget {
       ),
     ),
   );
-}
-
-final class _XLabTrajectoryRenderer extends ChangeNotifier
-    implements TrajectoryEffectRendering {
-  final Map<TrajectoryID, List<Offset>> _trails =
-      <TrajectoryID, List<Offset>>{};
-
-  @override
-  Widget get view =>
-      CustomPaint(size: Size.infinite, painter: _XLabTrajectoryPainter(this));
-
-  @override
-  void renderBegan(List<TrajectoryPoint> points) {
-    for (final point in points) {
-      _trails[point.id] = <Offset>[point.location];
-    }
-    notifyListeners();
-  }
-
-  @override
-  void renderMoved(List<TrajectoryPoint> points) {
-    for (final point in points) {
-      final trail = _trails.putIfAbsent(point.id, () => <Offset>[]);
-      trail.add(point.location);
-      if (trail.length > 28) trail.removeAt(0);
-    }
-    notifyListeners();
-  }
-
-  @override
-  void renderEnded(List<TrajectoryID> identifiers) {
-    for (final id in identifiers) {
-      _trails.remove(id);
-    }
-    notifyListeners();
-  }
-
-  @override
-  void reset() {
-    _trails.clear();
-    notifyListeners();
-  }
-}
-
-final class _XLabTrajectoryPainter extends CustomPainter {
-  _XLabTrajectoryPainter(this.renderer) : super(repaint: renderer);
-  final _XLabTrajectoryRenderer renderer;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    for (final trail in renderer._trails.values) {
-      if (trail.isEmpty) continue;
-      final path = Path()..moveTo(trail.first.dx, trail.first.dy);
-      for (final point in trail.skip(1)) {
-        path.lineTo(point.dx, point.dy);
-      }
-      canvas.drawPath(
-        path,
-        Paint()
-          ..color = XLabPalette.pink.withValues(alpha: 0.32)
-          ..strokeWidth = 13
-          ..strokeCap = StrokeCap.round
-          ..strokeJoin = StrokeJoin.round
-          ..style = PaintingStyle.stroke
-          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 9),
-      );
-      canvas.drawPath(
-        path,
-        Paint()
-          ..shader = const LinearGradient(
-            colors: <Color>[Color(0xFFFF8FD8), Color(0xFF78A9FF)],
-          ).createShader(Offset.zero & size)
-          ..strokeWidth = 4
-          ..strokeCap = StrokeCap.round
-          ..strokeJoin = StrokeJoin.round
-          ..style = PaintingStyle.stroke,
-      );
-      canvas.drawCircle(trail.last, 7, Paint()..color = Colors.white);
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _XLabTrajectoryPainter oldDelegate) => false;
 }

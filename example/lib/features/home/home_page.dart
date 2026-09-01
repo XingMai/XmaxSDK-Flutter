@@ -613,7 +613,7 @@ final class _PipelineCard extends StatelessWidget {
               style: const TextStyle(
                 color: XLabPalette.secondaryText,
                 height: 1.5,
-                fontSize: 12,
+                fontSize: 11,
               ),
             ),
             const SizedBox(height: 18),

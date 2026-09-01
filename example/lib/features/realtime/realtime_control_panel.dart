@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:cached_network_image/cached_network_image.dart';
@@ -113,6 +114,11 @@ final class XLabRealtimeControlPanel extends StatelessWidget {
   final VoidCallback onTouchStart;
   final VoidCallback onPromptSubmit;
   final VoidCallback onPromptReference;
+
+  void _submitPrompt() {
+    unawaited(HapticFeedback.lightImpact());
+    onPromptSubmit();
+  }
 
   @override
   Widget build(BuildContext context) => Opacity(
@@ -265,7 +271,7 @@ final class XLabRealtimeControlPanel extends StatelessWidget {
                 controller: promptController,
                 maxLines: 1,
                 textInputAction: TextInputAction.send,
-                onSubmitted: (_) => onPromptSubmit(),
+                onSubmitted: (_) => _submitPrompt(),
                 onTapOutside: (_) =>
                     FocusManager.instance.primaryFocus?.unfocus(),
                 style: const TextStyle(color: Colors.white, fontSize: 13),
@@ -304,7 +310,7 @@ final class XLabRealtimeControlPanel extends StatelessWidget {
                       promptController.text.trim().isEmpty ||
                       (promptReference != null && !promptReference!.isReady)
                   ? null
-                  : onPromptSubmit,
+                  : _submitPrompt,
               child: const Icon(
                 Icons.arrow_upward_rounded,
                 color: Colors.white,
@@ -374,6 +380,11 @@ final class _ReferenceStripState extends State<_ReferenceStrip> {
     return target.references.indexWhere((item) => item.id == selectedID);
   }
 
+  void _selectReference(XLabRealtimeReference reference) {
+    unawaited(HapticFeedback.selectionClick());
+    widget.onReferenceChanged(reference);
+  }
+
   void _scheduleCenterSelectedReference() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -407,7 +418,7 @@ final class _ReferenceStripState extends State<_ReferenceStrip> {
       final selected = widget.selectedReference?.id == reference.id;
       return GestureDetector(
         key: _referenceKeys.putIfAbsent(reference.id, GlobalKey.new),
-        onTap: () => widget.onReferenceChanged(reference),
+        onTap: () => _selectReference(reference),
         child: Container(
           key: ValueKey<String>('reference-${reference.id}'),
           width: 44,

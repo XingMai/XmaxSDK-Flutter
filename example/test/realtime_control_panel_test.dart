@@ -1,8 +1,84 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xmax_sdk_example/features/realtime/realtime_control_panel.dart';
 
 void main() {
+  testWidgets('reference selection and prompt submission provide haptics', (
+    tester,
+  ) async {
+    final hapticTypes = <Object?>[];
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(SystemChannels.platform, (call) async {
+          if (call.method == 'HapticFeedback.vibrate') {
+            hapticTypes.add(call.arguments);
+          }
+          return null;
+        });
+    addTearDown(
+      () => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(SystemChannels.platform, null),
+    );
+
+    final controller = TextEditingController(text: 'custom effect');
+    addTearDown(controller.dispose);
+    final reference = _reference(id: 'haptic', referencePath: '/haptic.png');
+
+    await tester.pumpWidget(
+      _TestApp(
+        child: XLabRealtimeControlPanel(
+          mode: XLabRealtimePanelMode.character,
+          generating: false,
+          busy: false,
+          promptController: controller,
+          referencesByCategory: <String, List<XLabRealtimeReference>>{
+            XLabRealtimePanelMode.character.id: <XLabRealtimeReference>[
+              reference,
+            ],
+          },
+          selectedReference: null,
+          onModeChanged: (_) {},
+          onStop: () {},
+          onReferenceChanged: (_) {},
+          onAddReference: () {},
+          onTouchStart: () {},
+          onPromptSubmit: () {},
+          onPromptReference: () {},
+        ),
+      ),
+    );
+
+    await tester.tap(find.byKey(const ValueKey('reference-haptic')));
+    await tester.pump();
+
+    await tester.pumpWidget(
+      _TestApp(
+        child: XLabRealtimeControlPanel(
+          mode: XLabRealtimePanelMode.free,
+          generating: false,
+          busy: false,
+          promptController: controller,
+          referencesByCategory: const <String, List<XLabRealtimeReference>>{},
+          selectedReference: null,
+          onModeChanged: (_) {},
+          onStop: () {},
+          onReferenceChanged: (_) {},
+          onAddReference: () {},
+          onTouchStart: () {},
+          onPromptSubmit: () {},
+          onPromptReference: () {},
+        ),
+      ),
+    );
+    await tester.tap(find.byIcon(Icons.arrow_upward_rounded));
+    await tester.pump();
+
+    expect(hapticTypes, <Object?>[
+      'HapticFeedbackType.selectionClick',
+      'HapticFeedbackType.lightImpact',
+    ]);
+  });
+
   testWidgets('shows an uploaded category reference first with loading state', (
     tester,
   ) async {

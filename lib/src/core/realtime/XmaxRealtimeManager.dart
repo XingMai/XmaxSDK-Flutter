@@ -6,7 +6,6 @@ import '../../foundation/rtc/RtcManager.dart';
 import '../../media/MediaController.dart';
 import '../../media/MediaControlling.dart';
 import '../../render/RenderController.dart';
-import '../../render/RenderControlling.dart';
 import '../../service/network/ApiServicing.dart';
 import '../../service/realtime/RealtimeContext.dart';
 import '../../service/realtime/RealtimeError.dart';
@@ -39,7 +38,6 @@ final class XmaxRealtimeManager implements XmaxRealtimeManaging {
       rtcManager: rtcManager,
       errorListener: errorHandler.forward,
       remoteStreamListener: renderController.setRemoteStream,
-      remoteFrameReadyListener: renderController.notifyRemoteFrameReady,
     );
 
     final mediaController = MediaController(
@@ -63,7 +61,6 @@ final class XmaxRealtimeManager implements XmaxRealtimeManaging {
     return XmaxRealtimeManager.internal(
       options: options,
       mediaController: mediaController,
-      renderController: renderController,
       streamController: streamController,
       connectionManager: connectionManager,
       generationManager: generationManager,
@@ -74,13 +71,11 @@ final class XmaxRealtimeManager implements XmaxRealtimeManaging {
   XmaxRealtimeManager.internal({
     required this.options,
     required MediaControlling mediaController,
-    required RenderControlling renderController,
     required StreamControlling streamController,
     required XmaxRealtimeConnectionManager connectionManager,
     required XmaxRealtimeGenerationManager generationManager,
     required RealtimeErrorHandler errorHandler,
   }) : _mediaController = mediaController,
-       _renderController = renderController,
        _streamController = streamController,
        _connectionManager = connectionManager,
        _generationManager = generationManager,
@@ -89,7 +84,6 @@ final class XmaxRealtimeManager implements XmaxRealtimeManaging {
   @override
   final RealtimeConfiguration options;
   final MediaControlling _mediaController;
-  final RenderControlling _renderController;
   final StreamControlling _streamController;
   final XmaxRealtimeConnectionManager _connectionManager;
   final XmaxRealtimeGenerationManager _generationManager;
@@ -241,18 +235,21 @@ final class XmaxRealtimeManager implements XmaxRealtimeManaging {
       await stopGeneration();
     }
 
+    late final RealtimeMediaStream stream;
     try {
-      final stream = await _mediaController.switchCamera();
-
-      // Restart generation only after the new camera has had time to publish.
-      if (wasGenerating) {
-        await Future<void>.delayed(const Duration(milliseconds: 500));
-        await startGeneration();
-      }
-      return stream;
+      stream = await _mediaController.switchCamera();
     } catch (error) {
       throw _report(error);
     }
+
+    // Restart generation only after the new camera has had time to publish.
+    // startGeneration reports its own failures, so keep it outside the camera
+    // error boundary to avoid notifying the listener twice.
+    if (wasGenerating) {
+      await Future<void>.delayed(const Duration(milliseconds: 500));
+      await startGeneration();
+    }
+    return stream;
   }
 
   @override
@@ -559,9 +556,6 @@ final class XmaxRealtimeManager implements XmaxRealtimeManaging {
     required Completer<void> completer,
   }) async {
     try {
-      // Video becomes usable only after both rendering and audio are ready.
-      // This phase intentionally runs outside the generation mutation queue.
-      await _renderController.waitUntilRemoteFrameReady();
       await _streamController.activateRemoteAudio();
 
       _ensureCurrent(operationVersion);

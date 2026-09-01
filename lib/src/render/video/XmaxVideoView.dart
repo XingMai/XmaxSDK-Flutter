@@ -38,6 +38,7 @@ final class _XmaxVideoViewState extends State<XmaxVideoView>
   );
 
   late TrajectoryEffectRendering _renderer;
+  late bool _ownsRenderer;
   late final Ticker _samplingTicker;
   final Map<int, _ActivePointer> _activePointers = <int, _ActivePointer>{};
   Duration _currentSamplingTime = Duration.zero;
@@ -48,6 +49,7 @@ final class _XmaxVideoViewState extends State<XmaxVideoView>
   @override
   void initState() {
     super.initState();
+    _ownsRenderer = widget.trajectoryRenderer == null;
     _renderer = widget.trajectoryRenderer ?? DefaultTrajectoryEffectRenderer();
     _samplingTicker = createTicker(_sampleActivePointers);
   }
@@ -55,21 +57,26 @@ final class _XmaxVideoViewState extends State<XmaxVideoView>
   @override
   void didUpdateWidget(covariant XmaxVideoView oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.trajectoryRenderer != widget.trajectoryRenderer) {
-      _renderer.reset();
-      _renderer =
-          widget.trajectoryRenderer ?? DefaultTrajectoryEffectRenderer();
-    }
-
-    if (oldWidget.track != widget.track ||
+    final rendererChanged =
+        oldWidget.trajectoryRenderer != widget.trajectoryRenderer;
+    if (rendererChanged ||
+        oldWidget.track != widget.track ||
         oldWidget.isInteractionEnabled != widget.isInteractionEnabled) {
       _resetPointers();
+    }
+
+    if (rendererChanged) {
+      _disposeOwnedRenderer();
+      _ownsRenderer = widget.trajectoryRenderer == null;
+      _renderer =
+          widget.trajectoryRenderer ?? DefaultTrajectoryEffectRenderer();
     }
   }
 
   @override
   void dispose() {
     _resetPointers();
+    _disposeOwnedRenderer();
     _samplingTicker.dispose();
     super.dispose();
   }
@@ -284,6 +291,12 @@ final class _XmaxVideoViewState extends State<XmaxVideoView>
     _activePointers.clear();
     _stopSampling();
     _renderer.reset();
+  }
+
+  void _disposeOwnedRenderer() {
+    if (_ownsRenderer && _renderer is DefaultTrajectoryEffectRenderer) {
+      (_renderer as DefaultTrajectoryEffectRenderer).dispose();
+    }
   }
 }
 

@@ -18,17 +18,15 @@ import 'package:xmax_sdk/src/stream/quality/QualityControlling.dart';
 import 'package:xmax_sdk/src/stream/room/RoomControlling.dart';
 
 void main() {
-  test('decoded frame is forwarded before SEI selects renderer', () async {
+  test('matching SEI selects the remote renderer', () async {
     final rtc = _FakeRtc();
     final renderedStreams = <RemoteStream?>[];
-    final readyStreams = <RemoteStream>[];
     final controller = StreamController(
       rtcManager: rtc,
       roomController: _FakeRoom(),
       encodingController: _FakeEncoding(),
       qualityController: _FakeQuality(),
       remoteStreamListener: renderedStreams.add,
-      remoteFrameReadyListener: readyStreams.add,
     );
 
     await controller.connect(
@@ -50,10 +48,6 @@ void main() {
 
     expect(renderedStreams, isEmpty);
 
-    // RenderController caches this readiness until SEI selects the stream.
-    rtc.listener!.onFirstRemoteVideoFrameDecoded!(remote);
-    expect(readyStreams, <RemoteStream>[remote]);
-
     final generation = await controller.beginGeneration(
       taskID: 'task-1',
       videoFormat: const RealtimeVideoFormat(width: 832, height: 1472, fps: 24),
@@ -62,7 +56,7 @@ void main() {
     rtc.listener!.onSEIMessageReceived!(remote, utf8.encode('task-1'));
     await generation.value;
 
-    // Matching SEI both selects the renderer and acknowledges generation.
+    // Matching SEI selects the renderer and acknowledges generation directly.
     expect(renderedStreams, <RemoteStream?>[remote]);
   });
 

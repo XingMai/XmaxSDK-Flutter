@@ -27,13 +27,9 @@ void main() {
       remoteTrack,
       const RemoteVideoRenderBinding(
         RemoteStream(roomID: 'room', userID: 'bot', streamID: 'stream'),
-        isFrameReady: true,
       ),
     );
     await tester.pump();
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 300));
-
     expect(_remoteOpacity(tester), 1);
 
     VideoRenderRegistry.register(remoteTrack, null);
@@ -52,7 +48,6 @@ void main() {
         remoteTrack,
         const RemoteVideoRenderBinding(
           RemoteStream(roomID: 'room', userID: 'bot', streamID: 'stream'),
-          isFrameReady: true,
         ),
       );
       TrajectoryRegistry.register(
@@ -98,4 +93,4 @@ void main() {
 }
 
 double _remoteOpacity(WidgetTester tester) =>
-    tester.widget<AnimatedOpacity>(find.byType(AnimatedOpacity)).opacity;
+    tester.widget<Opacity>(find.byType(Opacity)).opacity;

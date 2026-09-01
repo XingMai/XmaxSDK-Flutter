@@ -99,6 +99,60 @@ void main() {
     expect(reported?.code, XmaxErrorCode.invalidConfiguration);
   });
 
+  test('camera switch stops and restores an active generation', () async {
+    final dependencies = _Dependencies();
+    final manager = dependencies.manager;
+    final localStream = await manager.createLocalCameraStream(
+      videoFormat: _Dependencies.format,
+    );
+    await manager.startGeneration(
+      localStream: localStream,
+      context: RealtimeContext(prompt: 'cached condition'),
+    );
+
+    final switchedStream = await manager.switchCamera();
+
+    expect(switchedStream, same(localStream));
+    expect(dependencies.media.switchCount, 1);
+    expect(dependencies.stream.startedPrompts, <String>[
+      'cached condition',
+      'cached condition',
+    ]);
+    expect(
+      (await manager.currentState).connectionState,
+      RealtimeConnectionState.generating,
+    );
+  });
+
+  test('generation restore failure is reported only once', () async {
+    final dependencies = _Dependencies();
+    final manager = dependencies.manager;
+    final reportedErrors = <XmaxError>[];
+    await manager.setErrorListener(reportedErrors.add);
+    final localStream = await manager.createLocalCameraStream(
+      videoFormat: _Dependencies.format,
+    );
+    await manager.startGeneration(
+      localStream: localStream,
+      context: RealtimeContext(prompt: 'cached condition'),
+    );
+    dependencies.stream.generationStartError = StateError('restore failed');
+
+    await expectLater(
+      manager.switchCamera(),
+      throwsA(
+        isA<XmaxError>().having(
+          (error) => error.code,
+          'code',
+          XmaxErrorCode.internalError,
+        ),
+      ),
+    );
+
+    expect(reportedErrors, hasLength(1));
+    expect(reportedErrors.single.message, contains('restore failed'));
+  });
+
   test('serializes generation updates without disconnecting', () async {
     final dependencies = _Dependencies();
     final manager = dependencies.manager;
@@ -148,51 +202,6 @@ void main() {
       RealtimeConnectionState.generating,
     );
   });
-
-  test(
-    'updates the condition while the first remote frame is loading',
-    () async {
-      final dependencies = _Dependencies();
-      final manager = dependencies.manager;
-      final localStream = await manager.createLocalCameraStream(
-        videoFormat: _Dependencies.format,
-      );
-      final readinessStarted = Completer<void>();
-      final releaseRemoteFrame = Completer<void>();
-      dependencies.render
-        ..readinessStarted = readinessStarted
-        ..readinessGate = releaseRemoteFrame;
-
-      final initialGeneration = manager.startGeneration(
-        localStream: localStream,
-        context: RealtimeContext(prompt: 'reference-a'),
-      );
-      await readinessStarted.future;
-
-      final conditionChanged = manager.startGeneration(
-        context: RealtimeContext(prompt: 'reference-b'),
-      );
-      await Future<void>.delayed(Duration.zero);
-
-      expect(dependencies.stream.updatedPrompts, <String>['reference-b']);
-      expect(dependencies.stream.disconnectCount, 0);
-      expect(
-        (await manager.currentState).connectionState,
-        RealtimeConnectionState.connected,
-      );
-
-      releaseRemoteFrame.complete();
-      await Future.wait(<Future<RealtimeMediaStream?>>[
-        initialGeneration,
-        conditionChanged,
-      ]);
-
-      expect(
-        (await manager.currentState).connectionState,
-        RealtimeConnectionState.generating,
-      );
-    },
-  );
 
   test('a newer request supersedes a generation waiting for SEI', () async {
     final dependencies = _Dependencies();
@@ -264,7 +273,6 @@ final class _Dependencies {
     manager = XmaxRealtimeManager.internal(
       options: const RealtimeConfiguration(model: RealtimeModel.x2_0),
       mediaController: media,
-      renderController: render,
       streamController: stream,
       connectionManager: connection,
       generationManager: generation,
@@ -295,6 +303,7 @@ final class _FakeMedia implements MediaControlling {
   late final RealtimeVideoTrack track;
   late final RealtimeMediaStream stream;
   int stopCount = 0;
+  int switchCount = 0;
 
   @override
   RealtimeVideoFormat? get currentVideoFormat => track.videoFormat;
@@ -329,7 +338,10 @@ final class _FakeMedia implements MediaControlling {
   @override
   void submitInteraction(InteractionFrame frame) {}
   @override
-  Future<RealtimeMediaStream> switchCamera() async => stream;
+  Future<RealtimeMediaStream> switchCamera() async {
+    switchCount += 1;
+    return stream;
+  }
 }
 
 final class _FakeStream implements StreamControlling {
@@ -343,6 +355,7 @@ final class _FakeStream implements StreamControlling {
   Completer<void>? _generationConfirmation;
   Completer<void>? firstUpdateStarted;
   Completer<void>? updateGate;
+  Object? generationStartError;
   @override
   bool get hasGenerationTask => generation;
   @override
@@ -353,6 +366,9 @@ final class _FakeStream implements StreamControlling {
     required RealtimeVideoFormat videoFormat,
     required RealtimeContext context,
   }) async {
+    final startError = generationStartError;
+    if (startError != null) throw startError;
+
     generation = true;
     startedPrompts.add(context.prompt);
 
@@ -435,11 +451,6 @@ final class _FakeStream implements StreamControlling {
 }
 
 final class _FakeRender implements RenderControlling {
-  Completer<void>? readinessStarted;
-  Completer<void>? readinessGate;
-
-  @override
-  void notifyRemoteFrameReady(RemoteStream stream) {}
   @override
   void registerRemoteTrack(
     RealtimeVideoTrack track, {
@@ -449,14 +460,6 @@ final class _FakeRender implements RenderControlling {
   void resetRemoteTrack(RealtimeVideoTrack? track) {}
   @override
   void setRemoteStream(RemoteStream? stream) {}
-  @override
-  Future<void> waitUntilRemoteFrameReady() async {
-    final started = readinessStarted;
-    if (started != null && !started.isCompleted) {
-      started.complete();
-    }
-    await readinessGate?.future;
-  }
 }
 
 final class _FakeSessions implements RealtimeSessionServicing {
