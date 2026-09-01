@@ -135,7 +135,9 @@ final class RtcManager implements RtcManaging {
     );
     await _check(
       _engine.setLocalVideoMirrorType(
-        position == CameraPosition.front ? MirrorType.render : MirrorType.none,
+        position == CameraPosition.front
+            ? MirrorType.renderAndEncoder
+            : MirrorType.none,
       ),
       'setLocalVideoMirrorType',
     );
