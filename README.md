@@ -31,11 +31,6 @@ and interactive image animation directly into their apps.
 - Asynchronous APIs based on Dart Futures
 - Flutter widget integration for iOS and Android
 
-This camera-focused release does not provide local still images or local video
-files as RTC input, raw video-frame pipelines, video-frame interpolation, or
-platform-specific SwiftUI APIs. Object storage is an independent file service;
-uploading a local file does not turn it into an RTC media stream.
-
 ## Requirements
 
 - Flutter 3.35 or later
