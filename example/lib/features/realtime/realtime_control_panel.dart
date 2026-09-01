@@ -1,7 +1,10 @@
 import 'dart:convert';
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
+const _referenceBackgroundColor = Color(0xFF303032);
 
 enum XLabRealtimePanelMode {
   character('charx', '换形象', '视频中角色替换成参考图中角色'),
@@ -240,13 +243,10 @@ final class XLabRealtimeControlPanel extends StatelessWidget {
             const SizedBox(width: 10),
             _CircleAction(
               tooltip: '添加参考图',
+              backgroundColor: const Color(0x1FFFFFFF),
               onPressed: busy ? null : onPromptReference,
               child: promptReference == null
-                  ? const Icon(
-                      Icons.add_photo_alternate_outlined,
-                      color: Colors.white,
-                      size: 16,
-                    )
+                  ? const Icon(Icons.add, color: Colors.white, size: 16)
                   : _ReferenceImage(reference: promptReference!, radius: 14),
             ),
             const SizedBox(width: 8),
@@ -259,7 +259,7 @@ final class XLabRealtimeControlPanel extends StatelessWidget {
               child: const Icon(
                 Icons.arrow_upward_rounded,
                 color: Colors.white,
-                size: 17,
+                size: 14,
               ),
             ),
             const SizedBox(width: 8),
@@ -361,7 +361,10 @@ final class _ReferenceStripState extends State<_ReferenceStrip> {
             children: <Widget>[
               ClipRRect(
                 borderRadius: BorderRadius.circular(9),
-                child: _ReferenceImage(reference: reference),
+                child: ColoredBox(
+                  color: _referenceBackgroundColor,
+                  child: _ReferenceImage(reference: reference),
+                ),
               ),
               if (selected)
                 Positioned(
@@ -402,7 +405,7 @@ final class _AddReferenceButton extends StatelessWidget {
       width: 44,
       height: 44,
       decoration: BoxDecoration(
-        color: const Color(0xFF303032),
+        color: _referenceBackgroundColor,
         borderRadius: BorderRadius.circular(9),
       ),
       child: uploading
@@ -434,30 +437,38 @@ final class _ReferenceImage extends StatelessWidget {
   Widget build(BuildContext context) {
     final bytes = reference.iconBytes;
     final url = reference.iconURL;
+    final dimension = radius == null ? 44.0 : radius! * 2;
     final image = bytes != null
         ? Image.memory(
             bytes,
-            width: radius == null ? 44 : radius! * 2,
-            height: radius == null ? 44 : radius! * 2,
+            width: dimension,
+            height: dimension,
             fit: BoxFit.cover,
           )
         : url == null
         ? const ColoredBox(
-            color: Color(0xFF303032),
+            color: _referenceBackgroundColor,
             child: Icon(Icons.image_outlined, color: Colors.white54),
           )
-        : Image.network(
-            url,
-            width: radius == null ? 44 : radius! * 2,
-            height: radius == null ? 44 : radius! * 2,
+        : CachedNetworkImage(
+            imageUrl: url,
+            width: dimension,
+            height: dimension,
             fit: BoxFit.cover,
-            errorBuilder: (_, _, _) => const ColoredBox(
-              color: Color(0xFF303032),
+            fadeInDuration: const Duration(milliseconds: 200),
+            placeholder: (_, _) =>
+                const ColoredBox(color: _referenceBackgroundColor),
+            errorWidget: (_, _, _) => const ColoredBox(
+              color: _referenceBackgroundColor,
               child: Icon(Icons.image_outlined, color: Colors.white54),
             ),
           );
-    if (radius == null) return image;
-    return ClipOval(child: image);
+    final content = SizedBox.square(
+      dimension: dimension,
+      child: ColoredBox(color: _referenceBackgroundColor, child: image),
+    );
+    if (radius == null) return content;
+    return ClipOval(child: content);
   }
 }
 
@@ -475,18 +486,24 @@ final class _CircleAction extends StatelessWidget {
   final Color backgroundColor;
 
   @override
-  Widget build(BuildContext context) => SizedBox(
-    width: 28,
-    height: 28,
-    child: IconButton(
-      tooltip: tooltip,
-      padding: EdgeInsets.zero,
-      style: IconButton.styleFrom(
-        backgroundColor: backgroundColor,
-        disabledBackgroundColor: backgroundColor.withValues(alpha: 0.2),
+  Widget build(BuildContext context) => Opacity(
+    opacity: onPressed == null ? 0.2 : 1,
+    child: SizedBox(
+      width: 28,
+      height: 28,
+      child: IconButton(
+        tooltip: tooltip,
+        padding: EdgeInsets.zero,
+        style: IconButton.styleFrom(
+          backgroundColor: backgroundColor,
+          disabledBackgroundColor: backgroundColor,
+          foregroundColor: Colors.white,
+          disabledForegroundColor: Colors.white,
+          shape: const CircleBorder(),
+        ),
+        onPressed: onPressed,
+        icon: child,
       ),
-      onPressed: onPressed,
-      icon: child,
     ),
   );
 }
