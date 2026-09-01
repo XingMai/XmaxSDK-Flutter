@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:xmax_sdk/src/foundation/errors/XmaxError.dart';
 import 'package:xmax_sdk/src/foundation/media/camera/CameraPosition.dart';
 import 'package:xmax_sdk/src/foundation/rtc/RtcEventListener.dart';
 import 'package:xmax_sdk/src/foundation/rtc/RtcManaging.dart';
@@ -101,9 +102,107 @@ void main() {
     await Future<void>.delayed(Duration.zero);
     expect(controller.hasGenerationTask, isFalse);
   });
+
+  test(
+    'pending generation receives subscription failure without forwarding',
+    () async {
+      final expectedError = StateError('subscribe failed');
+      final rtc = _FakeRtc(subscribeRemoteVideoError: expectedError);
+      final reportedErrors = <XmaxError>[];
+      final controller = StreamController(
+        rtcManager: rtc,
+        roomController: _FakeRoom(),
+        encodingController: _FakeEncoding(),
+        qualityController: _FakeQuality(),
+        errorListener: reportedErrors.add,
+      );
+
+      await controller.connect(
+        connection: const RealtimeSessionConnection(
+          roomID: 'room',
+          userID: 'local-user',
+          token: 'token',
+          botName: 'bot',
+        ),
+        ensureActive: () {},
+      );
+      final confirmation = await controller.beginGeneration(
+        taskID: 'task-1',
+        videoFormat: const RealtimeVideoFormat(
+          width: 832,
+          height: 1472,
+          fps: 24,
+        ),
+        context: RealtimeContext(prompt: 'animate'),
+      );
+
+      rtc.listener!.onRemoteVideoPublished!(
+        const RemoteStream(
+          roomID: 'room',
+          userID: 'bot',
+          streamID: 'bot-stream',
+        ),
+        true,
+      );
+
+      await expectLater(
+        confirmation.value,
+        throwsA(
+          isA<XmaxError>().having(
+            (error) => error.message,
+            'message',
+            expectedError.toString(),
+          ),
+        ),
+      );
+      expect(reportedErrors, isEmpty);
+    },
+  );
+
+  test(
+    'subscription failure without pending generation is forwarded',
+    () async {
+      final rtc = _FakeRtc(
+        subscribeRemoteVideoError: StateError('subscribe failed'),
+      );
+      final reportedErrors = <XmaxError>[];
+      final controller = StreamController(
+        rtcManager: rtc,
+        roomController: _FakeRoom(),
+        encodingController: _FakeEncoding(),
+        qualityController: _FakeQuality(),
+        errorListener: reportedErrors.add,
+      );
+
+      await controller.connect(
+        connection: const RealtimeSessionConnection(
+          roomID: 'room',
+          userID: 'local-user',
+          token: 'token',
+          botName: 'bot',
+        ),
+        ensureActive: () {},
+      );
+      rtc.listener!.onRemoteVideoPublished!(
+        const RemoteStream(
+          roomID: 'room',
+          userID: 'bot',
+          streamID: 'bot-stream',
+        ),
+        true,
+      );
+      await Future<void>.delayed(Duration.zero);
+
+      expect(reportedErrors, hasLength(1));
+      expect(reportedErrors.single.code, XmaxErrorCode.internalError);
+    },
+  );
 }
 
 final class _FakeRtc implements RtcManaging {
+  _FakeRtc({this.subscribeRemoteVideoError});
+
+  final Object? subscribeRemoteVideoError;
   RtcEventListener? listener;
 
   @override
@@ -116,7 +215,12 @@ final class _FakeRtc implements RtcManaging {
   Future<void> subscribeRemoteVideo({
     required String streamID,
     required bool subscribe,
-  }) async {}
+  }) async {
+    final error = subscribeRemoteVideoError;
+    if (subscribe && error != null) {
+      throw error;
+    }
+  }
 
   @override
   Future<void> subscribeRemoteAudio({

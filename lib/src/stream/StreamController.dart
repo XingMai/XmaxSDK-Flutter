@@ -321,8 +321,10 @@ final class StreamController implements StreamControlling {
       );
     } catch (error) {
       _remoteVideoSubscriptions.remove(stream.streamID);
-      _rejectGeneration(XmaxError.from(error));
-      _errorListener?.call(XmaxError.from(error));
+      final xmaxError = XmaxError.from(error);
+      if (!_rejectGeneration(xmaxError)) {
+        _errorListener?.call(xmaxError);
+      }
     }
   }
 
@@ -368,15 +370,16 @@ final class StreamController implements StreamControlling {
 
   void _onError(Object error) {
     final xmaxError = XmaxError.from(error);
-    _rejectGeneration(xmaxError);
-    _errorListener?.call(xmaxError);
+    if (!_rejectGeneration(xmaxError)) {
+      _errorListener?.call(xmaxError);
+    }
   }
 
   bool _isExpectedRemote(RemoteStream stream) =>
       stream.roomID == _roomID &&
       (_botName.isEmpty || stream.userID == _botName);
 
-  void _rejectGeneration(XmaxError error) {
+  bool _rejectGeneration(XmaxError error) {
     final completer = _generationCompleter;
     _generationTimer?.cancel();
     _generationTimer = null;
@@ -384,7 +387,9 @@ final class StreamController implements StreamControlling {
 
     if (completer != null && !completer.isCompleted) {
       completer.completeError(error);
+      return true;
     }
+    return false;
   }
 
   Future<void> _clearGeneration({required bool notifyRemote}) async {

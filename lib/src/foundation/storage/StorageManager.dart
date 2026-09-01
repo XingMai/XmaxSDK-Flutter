@@ -3,8 +3,11 @@ import 'dart:io';
 
 import 'package:tencentcloud_cos_sdk_plugin_nobeacon/cos.dart';
 import 'package:tencentcloud_cos_sdk_plugin_nobeacon/cos_transfer_manger.dart';
+import 'package:tencentcloud_cos_sdk_plugin_nobeacon/enums.dart';
 import 'package:tencentcloud_cos_sdk_plugin_nobeacon/pigeon.dart';
 
+import '../errors/ErrorMessageFormatter.dart';
+import '../errors/ErrorNormalizer.dart';
 import '../errors/XmaxError.dart';
 import 'StorageManaging.dart';
 import 'StorageModels.dart';
@@ -81,18 +84,28 @@ final class StorageManager implements StorageManaging {
         },
         (clientException, serviceException) {
           if (!completer.isCompleted) {
+            final error = serviceException ?? clientException;
             completer.completeError(
               XmaxError(
                 code: XmaxErrorCode.uploadError,
-                message:
-                    serviceException?.toString() ??
-                    clientException?.toString() ??
-                    'Storage upload failed',
+                message: error == null
+                    ? 'Storage upload failed'
+                    : ErrorMessageFormatter.format(error),
               ),
             );
           }
         },
       );
+      void stateCallback(TransferState state) {
+        if (state == TransferState.CANCELED && !completer.isCompleted) {
+          completer.completeError(
+            const XmaxError(
+              code: XmaxErrorCode.cancelled,
+              message: 'Storage upload was cancelled',
+            ),
+          );
+        }
+      }
 
       switch (source) {
         case StorageDataUploadSource(:final data):
@@ -104,6 +117,7 @@ final class StorageManager implements StorageManaging {
             customHeaders: <String, String>{'Content-Type': contentType},
             sessionCredentials: sessionCredentials,
             resultListener: resultListener,
+            stateCallback: stateCallback,
             progressCallBack: progress,
           );
         case StorageFileUploadSource(:final fileURL):
@@ -115,6 +129,7 @@ final class StorageManager implements StorageManaging {
             customHeaders: <String, String>{'Content-Type': contentType},
             sessionCredentials: sessionCredentials,
             resultListener: resultListener,
+            stateCallback: stateCallback,
             progressCallBack: progress,
           );
       }
@@ -123,9 +138,15 @@ final class StorageManager implements StorageManaging {
     } on XmaxError {
       rethrow;
     } catch (error) {
+      if (ErrorNormalizer.isCancellation(error)) {
+        throw const XmaxError(
+          code: XmaxErrorCode.cancelled,
+          message: 'Storage upload was cancelled',
+        );
+      }
       throw XmaxError(
         code: XmaxErrorCode.uploadError,
-        message: error.toString(),
+        message: ErrorMessageFormatter.format(error),
       );
     }
   }
@@ -186,9 +207,15 @@ final class StorageManager implements StorageManaging {
     } on XmaxError {
       rethrow;
     } catch (error) {
+      if (ErrorNormalizer.isCancellation(error)) {
+        throw const XmaxError(
+          code: XmaxErrorCode.cancelled,
+          message: 'Storage download was cancelled',
+        );
+      }
       throw XmaxError(
         code: XmaxErrorCode.downloadError,
-        message: error.toString(),
+        message: ErrorMessageFormatter.format(error),
       );
     } finally {
       await sink?.close();

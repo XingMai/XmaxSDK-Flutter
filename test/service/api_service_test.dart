@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xmax_sdk/src/service/network/ApiService.dart';
@@ -68,6 +69,43 @@ void main() {
       ),
     );
   });
+
+  test('ApiService maps an aborted request to cancelled', () async {
+    final service = ApiService(
+      apiKey: 'key',
+      transport: _FailingTransport(
+        const HttpException('Request has been aborted'),
+      ),
+    );
+
+    await expectLater(
+      service.get<Object>('/session', (json) => json!),
+      throwsA(
+        isA<XmaxError>()
+            .having((error) => error.code, 'code', XmaxErrorCode.cancelled)
+            .having(
+              (error) => error.message,
+              'message',
+              'API request was cancelled',
+            ),
+      ),
+    );
+  });
+}
+
+final class _FailingTransport implements ApiTransport {
+  const _FailingTransport(this.error);
+
+  final Object error;
+
+  @override
+  Future<ApiTransportResponse> send({
+    required ApiMethod method,
+    required Uri url,
+    required Map<String, String> headers,
+    required List<int>? body,
+    required Duration timeout,
+  }) async => throw error;
 }
 
 final class _FakeTransport implements ApiTransport {

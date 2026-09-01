@@ -2,6 +2,8 @@ import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
 
+import '../../foundation/errors/ErrorMessageFormatter.dart';
+import '../../foundation/errors/ErrorNormalizer.dart';
 import '../../foundation/errors/XmaxError.dart';
 import '../../foundation/logging/XmaxLogger.dart';
 import '../../foundation/storage/StorageManaging.dart';
@@ -204,14 +206,23 @@ final class StorageService implements StorageServicing {
       );
       return result;
     } on XmaxError catch (error) {
-      _logUploadFailure(error, startedAt);
+      if (error.code != XmaxErrorCode.uploadError) {
+        _logUploadFailure(error, startedAt);
+      }
       rethrow;
     } catch (error) {
+      if (ErrorNormalizer.isCancellation(error)) {
+        const cancelledError = XmaxError(
+          code: XmaxErrorCode.cancelled,
+          message: 'Storage upload was cancelled',
+        );
+        _logUploadFailure(cancelledError, startedAt);
+        throw cancelledError;
+      }
       final uploadError = XmaxError(
         code: XmaxErrorCode.uploadError,
-        message: error.toString(),
+        message: ErrorMessageFormatter.format(error),
       );
-      _logUploadFailure(uploadError, startedAt);
       throw uploadError;
     }
   }

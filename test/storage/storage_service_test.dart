@@ -1,4 +1,5 @@
 import 'dart:typed_data';
+import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xmax_sdk/src/foundation/storage/StorageManaging.dart';
@@ -115,6 +116,29 @@ void main() {
       throwsA(isA<XmaxError>()),
     );
   });
+
+  test('upload maps an aborted platform request to cancelled', () async {
+    storageManager.uploadError = const HttpException(
+      'Request has been aborted',
+    );
+
+    await expectLater(
+      service.uploadImage(
+        data: Uint8List.fromList(<int>[1]),
+        fileName: 'image.png',
+        contentType: 'image/png',
+      ),
+      throwsA(
+        isA<XmaxError>()
+            .having((error) => error.code, 'code', XmaxErrorCode.cancelled)
+            .having(
+              (error) => error.message,
+              'message',
+              'Storage upload was cancelled',
+            ),
+      ),
+    );
+  });
 }
 
 final class _FakeApiService implements ApiServicing {
@@ -152,6 +176,7 @@ final class _FakeApiService implements ApiServicing {
 final class _FakeStorageManager implements StorageManaging {
   String objectKey = '';
   String contentType = '';
+  Object? uploadError;
 
   @override
   Future<StoredFile> upload({
@@ -161,6 +186,10 @@ final class _FakeStorageManager implements StorageManaging {
     required StorageConfiguration configuration,
     StorageProgressListener? progress,
   }) async {
+    final error = uploadError;
+    if (error != null) {
+      throw error;
+    }
     this.objectKey = objectKey;
     this.contentType = contentType;
     progress?.call(3, 3);

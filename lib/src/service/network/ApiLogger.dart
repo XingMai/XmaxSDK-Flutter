@@ -1,3 +1,4 @@
+import '../../foundation/errors/ErrorMessageFormatter.dart';
 import '../../foundation/logging/XmaxLogger.dart';
 import 'ApiServicing.dart';
 
@@ -35,7 +36,7 @@ abstract final class ApiLogger {
       message:
           '${method.value} $path 失败 (Request Failed)\n'
           '├─ 耗时：$durationMs ms\n'
-          '└─ 原因：${_errorMessage(error)}',
+          '└─ 原因：${ErrorMessageFormatter.format(error)}',
     );
   }
 
@@ -50,9 +51,4 @@ abstract final class ApiLogger {
       '├─ 状态：$statusCode\n'
       '├─ 耗时：$durationMs ms\n'
       '└─ 响应：$bodyByteCount bytes';
-
-  static String _errorMessage(Object error) {
-    final message = error.toString().trim();
-    return message.isEmpty ? error.runtimeType.toString() : message;
-  }
 }

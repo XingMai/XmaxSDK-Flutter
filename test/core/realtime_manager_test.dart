@@ -26,6 +26,18 @@ import 'package:xmax_sdk/src/service/realtime/RealtimeVideoTrack.dart';
 import 'package:xmax_sdk/src/stream/StreamControlling.dart';
 
 void main() {
+  test('error listener failure does not replace the SDK error', () {
+    final handler = RealtimeErrorHandler();
+    handler.setListener((_) => throw StateError('listener failed'));
+    const error = XmaxError(
+      code: XmaxErrorCode.rtcError,
+      message: 'RTC failed',
+    );
+
+    expect(handler.report(error), same(error));
+    expect(() => handler.forward(error), returnsNormally);
+  });
+
   test('realtime manager follows iOS camera generation lifecycle', () async {
     final dependencies = _Dependencies();
     final manager = dependencies.manager;

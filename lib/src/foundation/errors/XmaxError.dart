@@ -1,3 +1,5 @@
+import 'ErrorNormalizer.dart';
+
 /// SDK 向接入方暴露的统一错误码。
 enum XmaxErrorCode {
   invalidAPIKey('INVALID_API_KEY'),
@@ -42,7 +44,7 @@ final class XmaxError implements Exception {
     }
     return XmaxError(
       code: XmaxErrorCode.internalError,
-      message: error.toString(),
+      message: ErrorNormalizer.description(error),
     );
   }
 

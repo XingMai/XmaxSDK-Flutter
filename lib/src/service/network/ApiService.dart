@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import '../../foundation/errors/ErrorMessageFormatter.dart';
+import '../../foundation/errors/ErrorNormalizer.dart';
 import '../../foundation/errors/XmaxError.dart';
 import 'ApiLogger.dart';
 import 'ApiServicing.dart';
@@ -101,17 +103,6 @@ final class ApiService implements ApiServicing {
         body: encodedBody,
         timeout: _timeout,
       );
-    } on TimeoutException catch (error) {
-      ApiLogger.logFailure(
-        method: method,
-        path: path,
-        error: error,
-        durationMs: stopwatch.elapsedMilliseconds,
-      );
-      throw XmaxError(
-        code: XmaxErrorCode.networkError,
-        message: 'HTTP request failed: $error',
-      );
     } on XmaxError catch (error) {
       ApiLogger.logFailure(
         method: method,
@@ -127,9 +118,15 @@ final class ApiService implements ApiServicing {
         error: error,
         durationMs: stopwatch.elapsedMilliseconds,
       );
+      if (ErrorNormalizer.isCancellation(error)) {
+        throw const XmaxError(
+          code: XmaxErrorCode.cancelled,
+          message: 'API request was cancelled',
+        );
+      }
       throw XmaxError(
         code: XmaxErrorCode.networkError,
-        message: 'HTTP request failed: $error',
+        message: 'HTTP request failed: ${ErrorMessageFormatter.format(error)}',
       );
     }
 
@@ -166,7 +163,7 @@ final class ApiService implements ApiServicing {
       );
       throw XmaxError(
         code: XmaxErrorCode.apiError,
-        message: error.toString(),
+        message: ErrorMessageFormatter.format(error),
         httpStatus: response.statusCode,
       );
     }
