@@ -6,6 +6,8 @@ import 'package:flutter/services.dart';
 
 const _referenceBackgroundColor = Color(0xFF303032);
 
+enum XLabRealtimeReferenceUploadState { ready, uploading, failed }
+
 enum XLabRealtimePanelMode {
   character('charx', '换形象', '视频中角色替换成参考图中角色'),
   clothing('clothx', '换装', '视频中人物衣服替换成参考图中衣服'),
@@ -27,21 +29,29 @@ enum XLabRealtimePanelMode {
 }
 
 final class XLabRealtimeReference {
-  const XLabRealtimeReference({
+  XLabRealtimeReference({
     required this.id,
     required this.categoryID,
     required this.title,
     required this.referencePath,
     this.iconURL,
     this.iconBytes,
+    this.sourceURL,
+    this.uploadState = XLabRealtimeReferenceUploadState.ready,
   });
 
   final String id;
   final String categoryID;
   final String title;
-  final String referencePath;
+  String? referencePath;
   final String? iconURL;
   final Uint8List? iconBytes;
+  final Uri? sourceURL;
+  XLabRealtimeReferenceUploadState uploadState;
+
+  bool get isReady =>
+      uploadState == XLabRealtimeReferenceUploadState.ready &&
+      referencePath != null;
 
   factory XLabRealtimeReference.fromJson(Map<String, dynamic> json) =>
       XLabRealtimeReference(
@@ -84,7 +94,6 @@ final class XLabRealtimeControlPanel extends StatelessWidget {
     required this.onPromptSubmit,
     required this.onPromptReference,
     this.promptReference,
-    this.uploadingReference = false,
     super.key,
   });
 
@@ -95,7 +104,6 @@ final class XLabRealtimeControlPanel extends StatelessWidget {
   final List<XLabRealtimeReference> references;
   final XLabRealtimeReference? selectedReference;
   final XLabRealtimeReference? promptReference;
-  final bool uploadingReference;
   final ValueChanged<XLabRealtimePanelMode> onModeChanged;
   final VoidCallback onStop;
   final ValueChanged<XLabRealtimeReference?> onReferenceChanged;
@@ -187,7 +195,6 @@ final class XLabRealtimeControlPanel extends StatelessWidget {
       return _ReferenceStrip(
         references: visible,
         selectedReference: selectedReference,
-        uploadingReference: uploadingReference,
         onReferenceChanged: onReferenceChanged,
         onAddReference: onAddReference,
       );
@@ -242,18 +249,31 @@ final class XLabRealtimeControlPanel extends StatelessWidget {
             ),
             const SizedBox(width: 10),
             _CircleAction(
-              tooltip: '添加参考图',
+              tooltip: switch (promptReference?.uploadState) {
+                null => '添加参考图',
+                XLabRealtimeReferenceUploadState.uploading => '正在上传参考图',
+                XLabRealtimeReferenceUploadState.failed => '重试上传参考图',
+                XLabRealtimeReferenceUploadState.ready => '移除参考图',
+              },
               backgroundColor: const Color(0x1FFFFFFF),
-              onPressed: busy ? null : onPromptReference,
+              onPressed:
+                  busy ||
+                      promptReference?.uploadState ==
+                          XLabRealtimeReferenceUploadState.uploading
+                  ? null
+                  : onPromptReference,
               child: promptReference == null
                   ? const Icon(Icons.add, color: Colors.white, size: 16)
-                  : _ReferenceImage(reference: promptReference!, radius: 14),
+                  : _PromptReferencePreview(reference: promptReference!),
             ),
             const SizedBox(width: 8),
             _CircleAction(
               tooltip: '提交自定义模式描述',
               backgroundColor: const Color(0xFFFF2E88),
-              onPressed: busy || promptController.text.trim().isEmpty
+              onPressed:
+                  busy ||
+                      promptController.text.trim().isEmpty ||
+                      (promptReference != null && !promptReference!.isReady)
                   ? null
                   : onPromptSubmit,
               child: const Icon(
@@ -274,14 +294,12 @@ final class _ReferenceStrip extends StatefulWidget {
   const _ReferenceStrip({
     required this.references,
     required this.selectedReference,
-    required this.uploadingReference,
     required this.onReferenceChanged,
     required this.onAddReference,
   });
 
   final List<XLabRealtimeReference> references;
   final XLabRealtimeReference? selectedReference;
-  final bool uploadingReference;
   final ValueChanged<XLabRealtimeReference?> onReferenceChanged;
   final VoidCallback onAddReference;
 
@@ -341,17 +359,21 @@ final class _ReferenceStripState extends State<_ReferenceStrip> {
     separatorBuilder: (_, _) => const SizedBox(width: 10),
     itemBuilder: (context, index) {
       if (index == 0) {
-        return _AddReferenceButton(
-          uploading: widget.uploadingReference,
-          onPressed: widget.uploadingReference ? null : widget.onAddReference,
-        );
+        return _AddReferenceButton(onPressed: widget.onAddReference);
       }
       final reference = widget.references[index - 1];
       final selected = widget.selectedReference?.id == reference.id;
       return GestureDetector(
         key: _referenceKeys.putIfAbsent(reference.id, GlobalKey.new),
-        onTap: () => widget.onReferenceChanged(selected ? null : reference),
+        onTap: () => widget.onReferenceChanged(
+          reference.uploadState == XLabRealtimeReferenceUploadState.failed
+              ? reference
+              : selected
+              ? null
+              : reference,
+        ),
         child: Container(
+          key: ValueKey<String>('reference-${reference.id}'),
           width: 44,
           height: 44,
           color: Colors.transparent,
@@ -365,6 +387,11 @@ final class _ReferenceStripState extends State<_ReferenceStrip> {
                   color: _referenceBackgroundColor,
                   child: _ReferenceImage(reference: reference),
                 ),
+              ),
+              _ReferenceUploadOverlay(
+                key: ValueKey<String>('reference-upload-state-${reference.id}'),
+                state: reference.uploadState,
+                borderRadius: BorderRadius.circular(9),
               ),
               if (selected)
                 Positioned(
@@ -393,13 +420,13 @@ final class _ReferenceStripState extends State<_ReferenceStrip> {
 }
 
 final class _AddReferenceButton extends StatelessWidget {
-  const _AddReferenceButton({required this.uploading, required this.onPressed});
+  const _AddReferenceButton({required this.onPressed});
 
-  final bool uploading;
-  final VoidCallback? onPressed;
+  final VoidCallback onPressed;
 
   @override
   Widget build(BuildContext context) => GestureDetector(
+    key: const ValueKey<String>('add-reference'),
     onTap: onPressed,
     child: Container(
       width: 44,
@@ -408,23 +435,77 @@ final class _AddReferenceButton extends StatelessWidget {
         color: _referenceBackgroundColor,
         borderRadius: BorderRadius.circular(9),
       ),
-      child: uploading
-          ? const Padding(
-              padding: EdgeInsets.all(13),
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                color: Colors.white,
-              ),
-            )
-          : const Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: <Widget>[
-                Icon(Icons.add, color: Colors.white, size: 19),
-                Text('参考图', style: TextStyle(color: Colors.white, fontSize: 9)),
-              ],
-            ),
+      child: const Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: <Widget>[
+          Icon(Icons.add, color: Colors.white, size: 19),
+          Text('参考图', style: TextStyle(color: Colors.white, fontSize: 9)),
+        ],
+      ),
     ),
   );
+}
+
+final class _PromptReferencePreview extends StatelessWidget {
+  const _PromptReferencePreview({required this.reference});
+
+  final XLabRealtimeReference reference;
+
+  @override
+  Widget build(BuildContext context) => SizedBox.square(
+    key: const ValueKey<String>('prompt-reference-preview'),
+    dimension: 28,
+    child: Stack(
+      fit: StackFit.expand,
+      children: <Widget>[
+        _ReferenceImage(reference: reference, radius: 14),
+        _ReferenceUploadOverlay(
+          state: reference.uploadState,
+          borderRadius: BorderRadius.circular(14),
+        ),
+      ],
+    ),
+  );
+}
+
+final class _ReferenceUploadOverlay extends StatelessWidget {
+  const _ReferenceUploadOverlay({
+    required this.state,
+    required this.borderRadius,
+    super.key,
+  });
+
+  final XLabRealtimeReferenceUploadState state;
+  final BorderRadius borderRadius;
+
+  @override
+  Widget build(BuildContext context) {
+    if (state == XLabRealtimeReferenceUploadState.ready) {
+      return const SizedBox.shrink();
+    }
+
+    return ClipRRect(
+      borderRadius: borderRadius,
+      child: ColoredBox(
+        color: Colors.black.withValues(alpha: 0.48),
+        child: Center(
+          child: state == XLabRealtimeReferenceUploadState.uploading
+              ? const SizedBox.square(
+                  dimension: 16,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 1.8,
+                    color: Colors.white,
+                  ),
+                )
+              : const Icon(
+                  Icons.refresh_rounded,
+                  color: Colors.white,
+                  size: 18,
+                ),
+        ),
+      ),
+    );
+  }
 }
 
 final class _ReferenceImage extends StatelessWidget {

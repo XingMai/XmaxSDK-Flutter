@@ -44,7 +44,7 @@ class _RealtimePageState extends State<RealtimePage>
   XLabRealtimeReference? _promptReference;
   bool _cameraReady = false;
   bool _busy = false;
-  bool _uploadingReference = false;
+  final _referenceUploadTokens = <String, Object>{};
   late final _XLabTrajectoryRenderer? _customRenderer = widget.customTrajectory
       ? _XLabTrajectoryRenderer()
       : null;
@@ -181,11 +181,22 @@ class _RealtimePageState extends State<RealtimePage>
       await _stopGeneration();
       return;
     }
+
+    switch (reference.uploadState) {
+      case XLabRealtimeReferenceUploadState.uploading:
+        return;
+      case XLabRealtimeReferenceUploadState.failed:
+        await _uploadReference(reference);
+        return;
+      case XLabRealtimeReferenceUploadState.ready:
+        break;
+    }
+
+    final referencePath = reference.referencePath;
+    if (referencePath == null) return;
+
     await _startGeneration(
-      RealtimeContext(
-        prompt: _panelMode.prompt,
-        referencePath: reference.referencePath,
-      ),
+      RealtimeContext(prompt: _panelMode.prompt, referencePath: referencePath),
     );
   }
 
@@ -195,17 +206,25 @@ class _RealtimePageState extends State<RealtimePage>
 
   Future<void> _submitPrompt() async {
     final prompt = _promptController.text.trim();
-    if (prompt.isEmpty) return;
+    final promptReference = _promptReference;
+    if (prompt.isEmpty ||
+        (promptReference != null && !promptReference.isReady)) {
+      return;
+    }
+
     await _startGeneration(
       RealtimeContext(
         prompt: prompt,
-        referencePath: _promptReference?.referencePath,
+        referencePath: promptReference?.referencePath,
       ),
     );
   }
 
   Future<void> _pickReference({required bool forPrompt}) async {
-    if (_uploadingReference || _busy) return;
+    if (_busy) return;
+
+    if (forPrompt && _handlePromptReferenceAction()) return;
+
     const images = XTypeGroup(
       label: '参考图',
       extensions: <String>['jpg', 'jpeg', 'png', 'webp'],
@@ -217,42 +236,102 @@ class _RealtimePageState extends State<RealtimePage>
         acceptedTypeGroups: const <XTypeGroup>[images],
       );
       if (file == null || !mounted) return;
-      setState(() {
-        _uploadingReference = true;
-        _lastError = null;
-      });
+
       final bytes = await file.readAsBytes();
-      final uploaded = await _storageManager.uploadImage(
-        at: Uri.file(file.path),
-      );
       if (!mounted) return;
+
       final reference = XLabRealtimeReference(
         id: 'custom-${DateTime.now().microsecondsSinceEpoch}',
         categoryID: forPrompt ? XLabRealtimePanelMode.free.id : _panelMode.id,
         title: file.name,
-        referencePath: uploaded.url.toString(),
+        referencePath: null,
         iconBytes: bytes,
+        sourceURL: Uri.file(file.path),
+        uploadState: XLabRealtimeReferenceUploadState.uploading,
       );
+
+      // Match iOS: show and select the local image before COS upload begins.
       setState(() {
-        _references.insert(0, reference);
+        _lastError = null;
         if (forPrompt) {
           _promptReference = reference;
         } else {
+          _references.insert(0, reference);
           _selectedReference = reference;
         }
       });
-      if (!forPrompt) {
-        await _startGeneration(
-          RealtimeContext(
-            prompt: _panelMode.prompt,
-            referencePath: reference.referencePath,
-          ),
-        );
-      }
+
+      await _uploadReference(reference);
     } catch (error) {
       _showError(error);
-    } finally {
-      if (mounted) setState(() => _uploadingReference = false);
+    }
+  }
+
+  bool _handlePromptReferenceAction() {
+    final reference = _promptReference;
+    if (reference == null) return false;
+
+    switch (reference.uploadState) {
+      case XLabRealtimeReferenceUploadState.uploading:
+        return true;
+      case XLabRealtimeReferenceUploadState.failed:
+        unawaited(_uploadReference(reference));
+        return true;
+      case XLabRealtimeReferenceUploadState.ready:
+        _referenceUploadTokens.remove(reference.id);
+        setState(() => _promptReference = null);
+    }
+
+    return true;
+  }
+
+  Future<void> _uploadReference(XLabRealtimeReference reference) async {
+    final sourceURL = reference.sourceURL;
+    if (sourceURL == null) return;
+
+    // A token makes late COS results harmless after retry, removal, or dispose.
+    final token = Object();
+    _referenceUploadTokens[reference.id] = token;
+    setState(() {
+      reference.referencePath = null;
+      reference.uploadState = XLabRealtimeReferenceUploadState.uploading;
+      _lastError = null;
+    });
+
+    try {
+      final uploaded = await _storageManager.uploadImage(at: sourceURL);
+      if (!mounted || _referenceUploadTokens[reference.id] != token) return;
+
+      _referenceUploadTokens.remove(reference.id);
+      setState(() {
+        reference.referencePath = uploaded.url.toString();
+        reference.uploadState = XLabRealtimeReferenceUploadState.ready;
+      });
+
+      // Prompt references wait for the submit button. Category references
+      // generate immediately when the uploaded item is still selected.
+      if (identical(reference, _promptReference) ||
+          _selectedReference?.id != reference.id ||
+          _panelMode.id != reference.categoryID) {
+        return;
+      }
+
+      await _startGeneration(
+        RealtimeContext(
+          prompt: XLabRealtimePanelMode.values
+              .firstWhere((mode) => mode.id == reference.categoryID)
+              .prompt,
+          referencePath: reference.referencePath,
+        ),
+      );
+    } catch (error) {
+      if (!mounted || _referenceUploadTokens[reference.id] != token) return;
+
+      _referenceUploadTokens.remove(reference.id);
+      setState(() {
+        reference.uploadState = XLabRealtimeReferenceUploadState.failed;
+      });
+      _showError(error);
     }
   }
 
@@ -310,6 +389,7 @@ class _RealtimePageState extends State<RealtimePage>
     _promptController.removeListener(_promptDidChange);
     _promptController.dispose();
     _customRenderer?.dispose();
+    _referenceUploadTokens.clear();
     super.dispose();
   }
 
@@ -401,7 +481,6 @@ class _RealtimePageState extends State<RealtimePage>
                 references: _references,
                 selectedReference: _selectedReference,
                 promptReference: _promptReference,
-                uploadingReference: _uploadingReference,
                 onModeChanged: _selectMode,
                 onStop: () => unawaited(_stopGeneration()),
                 onReferenceChanged: (reference) =>
