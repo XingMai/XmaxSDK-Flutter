@@ -53,6 +53,7 @@ dev_dependencies:
 flutter:
 
   assets:
+    - assets/realtime_loading.gif
     - assets/realtime_reference_catalog.json
 
   # The following line ensures that the Material Icons font is

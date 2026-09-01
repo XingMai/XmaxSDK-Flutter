@@ -6,6 +6,7 @@ import 'package:xmax_sdk/XmaxSDK.dart';
 
 import '../../ui/xlab_theme.dart';
 import 'realtime_control_panel.dart';
+import 'realtime_loading_overlay.dart';
 
 class RealtimePage extends StatefulWidget {
   const RealtimePage({
@@ -44,6 +45,7 @@ class _RealtimePageState extends State<RealtimePage>
   XLabRealtimeReference? _promptReference;
   bool _cameraReady = false;
   bool _busy = false;
+  bool _isLoading = true;
   final _referenceUploadTokens = <String, Object>{};
   late final _XLabTrajectoryRenderer? _customRenderer = widget.customTrajectory
       ? _XLabTrajectoryRenderer()
@@ -94,7 +96,12 @@ class _RealtimePageState extends State<RealtimePage>
       setState(() => _lastError = error);
     });
     _manager.setCameraPreviewReadyListener(() {
-      if (mounted) setState(() => _cameraReady = true);
+      if (mounted) {
+        setState(() {
+          _cameraReady = true;
+          _isLoading = false;
+        });
+      }
     });
     _manager.setPerformanceAlarmListener((alarm) {
       if (mounted && alarm.status == RealtimePerformanceStatus.limited) {
@@ -113,6 +120,7 @@ class _RealtimePageState extends State<RealtimePage>
     setState(() {
       _busy = true;
       _cameraReady = false;
+      _isLoading = true;
       _lastError = null;
     });
     try {
@@ -122,6 +130,7 @@ class _RealtimePageState extends State<RealtimePage>
       if (mounted) setState(() => _localStream = stream);
     } catch (error) {
       _showError(error);
+      if (mounted) setState(() => _isLoading = false);
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -133,6 +142,7 @@ class _RealtimePageState extends State<RealtimePage>
     if (localStream == null) return;
     setState(() {
       _busy = true;
+      _isLoading = true;
       _lastError = null;
     });
     try {
@@ -142,9 +152,15 @@ class _RealtimePageState extends State<RealtimePage>
         localStream: generating ? null : localStream,
         context: context,
       );
-      if (mounted && remote != null) setState(() => _remoteStream = remote);
+      if (mounted) {
+        setState(() {
+          if (remote != null) _remoteStream = remote;
+          _isLoading = false;
+        });
+      }
     } catch (error) {
       _showError(error);
+      if (mounted) setState(() => _isLoading = false);
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -154,17 +170,22 @@ class _RealtimePageState extends State<RealtimePage>
     if (_busy || _state.connectionState != RealtimeConnectionState.generating) {
       return;
     }
-    setState(() => _busy = true);
+    setState(() {
+      _busy = true;
+      _isLoading = !_cameraReady;
+    });
     try {
       await _manager.disconnect();
       if (mounted) {
         setState(() {
           _remoteStream = null;
           _selectedReference = null;
+          _isLoading = !_cameraReady;
         });
       }
     } catch (error) {
       _showError(error);
+      if (mounted) setState(() => _isLoading = !_cameraReady);
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -337,12 +358,23 @@ class _RealtimePageState extends State<RealtimePage>
 
   Future<void> _switchCamera() async {
     if (_busy || _localStream == null) return;
-    setState(() => _busy = true);
+    final wasGenerating =
+        _state.connectionState == RealtimeConnectionState.generating;
+    setState(() {
+      _busy = true;
+      if (wasGenerating) _isLoading = true;
+    });
     try {
       final stream = await _manager.switchCamera();
-      if (mounted) setState(() => _localStream = stream);
+      if (mounted) {
+        setState(() {
+          _localStream = stream;
+          _isLoading = !_cameraReady;
+        });
+      }
     } catch (error) {
       _showError(error);
+      if (mounted) setState(() => _isLoading = !_cameraReady);
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -374,6 +406,7 @@ class _RealtimePageState extends State<RealtimePage>
         _localStream = null;
         _remoteStream = null;
         _cameraReady = false;
+        _isLoading = false;
       });
     }
   }
@@ -440,36 +473,7 @@ class _RealtimePageState extends State<RealtimePage>
                           size: 44,
                         ),
                       ),
-                    if (_busy ||
-                        !_cameraReady ||
-                        _state.connectionState ==
-                            RealtimeConnectionState.connecting)
-                      ColoredBox(
-                        color: Colors.black.withValues(alpha: 0.34),
-                        child: Center(
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: <Widget>[
-                              const SizedBox(
-                                width: 28,
-                                height: 28,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2.4,
-                                  color: Colors.white,
-                                ),
-                              ),
-                              const SizedBox(height: 12),
-                              Text(
-                                _loadingText,
-                                style: const TextStyle(
-                                  color: Color(0xB3FFFFFF),
-                                  fontSize: 12,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
+                    RealtimeLoadingOverlay(isLoading: _isLoading),
                   ],
                 ),
               ),
@@ -560,14 +564,6 @@ class _RealtimePageState extends State<RealtimePage>
         ],
       ),
     );
-  }
-
-  String get _loadingText {
-    if (!_cameraReady) return '正在启动摄像头…';
-    return switch (_state.connectionState) {
-      RealtimeConnectionState.connecting => '正在建立实时连接…',
-      _ => '正在等待生成画面…',
-    };
   }
 }
 
