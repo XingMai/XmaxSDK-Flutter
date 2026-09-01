@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:file_selector_platform_interface/file_selector_platform_interface.dart';
 import 'package:flutter/material.dart';
@@ -9,13 +10,13 @@ void main() {
   testWidgets('shows an image preview and iOS-aligned metadata after picking', (
     tester,
   ) async {
-    final imageFile = XFile(
+    final imageFile = _ReadTrackingXFile(
       '${Directory.current.path}/android/app/src/main/res/mipmap-mdpi/'
       'ic_launcher.png',
     );
 
     final originalPlatform = FileSelectorPlatform.instance;
-    FileSelectorPlatform.instance = _FileSelectorStub(XFile(imageFile.path));
+    FileSelectorPlatform.instance = _FileSelectorStub(imageFile);
     addTearDown(() => FileSelectorPlatform.instance = originalPlatform);
 
     await tester.pumpWidget(
@@ -47,7 +48,20 @@ void main() {
     expect(find.text('重新上传'), findsOneWidget);
     expect(find.text('安全检测上传'), findsOneWidget);
     expect(find.text('普通上传'), findsOneWidget);
+    expect(imageFile.readCount, 0);
   });
+}
+
+final class _ReadTrackingXFile extends XFile {
+  _ReadTrackingXFile(super.path);
+
+  int readCount = 0;
+
+  @override
+  Future<Uint8List> readAsBytes() {
+    readCount += 1;
+    return super.readAsBytes();
+  }
 }
 
 final class _FileSelectorStub extends FileSelectorPlatform {

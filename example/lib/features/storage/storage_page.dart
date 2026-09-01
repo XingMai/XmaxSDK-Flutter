@@ -28,8 +28,8 @@ class _StoragePageState extends State<StoragePage> {
   final _scrollController = ScrollController();
 
   XFile? _file;
-  Uint8List? _imageBytes;
   VideoPlayerController? _videoController;
+  int _selectionVersion = 0;
   bool _isImage = true;
   bool _picking = false;
   bool _uploading = false;
@@ -60,19 +60,11 @@ class _StoragePageState extends State<StoragePage> {
       mimeTypes: <String>['image/*', 'video/*'],
     );
 
-    VideoPlayerController? nextVideoController;
     try {
       final file = await openFile(
         acceptedTypeGroups: const <XTypeGroup>[mediaTypes],
       );
-      if (file == null) return;
-
-      if (mounted) {
-        setState(() {
-          _picking = true;
-          _error = null;
-        });
-      }
+      if (file == null || !mounted) return;
 
       final extension = file.name.split('.').last.toLowerCase();
       final isImage = <String>{
@@ -82,53 +74,96 @@ class _StoragePageState extends State<StoragePage> {
         'webp',
         'gif',
       }.contains(extension);
+      final selectionVersion = ++_selectionVersion;
 
-      Uint8List? imageBytes;
-      int fileBytes;
-      String resolution;
       if (isImage) {
-        imageBytes = await file.readAsBytes();
-        fileBytes = imageBytes.length;
-        resolution = await _imageResolution(imageBytes);
+        await _selectImage(file, selectionVersion: selectionVersion);
       } else {
-        fileBytes = await file.length();
-        nextVideoController = VideoPlayerController.file(
-          File(file.path),
-          videoPlayerOptions: VideoPlayerOptions(mixWithOthers: true),
-        );
-        await nextVideoController.initialize();
-        await nextVideoController.setLooping(true);
-        await nextVideoController.setVolume(0);
-        await nextVideoController.play();
-        resolution = _formatResolution(nextVideoController.value.size);
+        await _selectVideo(file, selectionVersion: selectionVersion);
       }
+    } catch (_) {
+      if (mounted) setState(() => _error = '读取文件失败，请重试');
+    }
+  }
 
-      if (!mounted) {
-        await nextVideoController?.dispose();
+  Future<void> _selectImage(XFile file, {required int selectionVersion}) async {
+    final previousVideoController = _videoController;
+
+    // Render from the local file immediately. Metadata can arrive later.
+    setState(() {
+      _file = file;
+      _videoController = null;
+      _isImage = true;
+      _picking = false;
+      _fileBytes = 0;
+      _resolution = '--';
+      _progress = 0;
+      _uploadedURL = null;
+      _elapsed = null;
+      _error = null;
+    });
+    await previousVideoController?.dispose();
+
+    try {
+      final fileBytesFuture = file.length();
+      final resolution = await _imageResolution(file.path);
+      final fileBytes = await fileBytesFuture;
+      if (!mounted || selectionVersion != _selectionVersion) return;
+
+      setState(() {
+        _fileBytes = fileBytes;
+        _resolution = resolution;
+      });
+    } catch (_) {
+      // Preview loading reports its own error; metadata is non-blocking.
+    }
+  }
+
+  Future<void> _selectVideo(XFile file, {required int selectionVersion}) async {
+    final previousVideoController = _videoController;
+    setState(() {
+      _file = file;
+      _videoController = null;
+      _isImage = false;
+      _picking = true;
+      _fileBytes = 0;
+      _resolution = '--';
+      _progress = 0;
+      _uploadedURL = null;
+      _elapsed = null;
+      _error = null;
+    });
+    await previousVideoController?.dispose();
+
+    final controller = VideoPlayerController.file(
+      File(file.path),
+      videoPlayerOptions: VideoPlayerOptions(mixWithOthers: true),
+    );
+    try {
+      final fileBytesFuture = file.length();
+      await controller.initialize();
+      await controller.setLooping(true);
+      await controller.setVolume(0);
+      await controller.play();
+      final fileBytes = await fileBytesFuture;
+
+      if (!mounted || selectionVersion != _selectionVersion) {
+        await controller.dispose();
         return;
       }
 
-      final previousVideoController = _videoController;
       setState(() {
-        _file = file;
-        _imageBytes = imageBytes;
-        _videoController = nextVideoController;
-        _isImage = isImage;
+        _videoController = controller;
         _picking = false;
         _fileBytes = fileBytes;
-        _resolution = resolution;
-        _progress = 0;
-        _uploadedURL = null;
-        _elapsed = null;
-        _error = null;
+        _resolution = _formatResolution(controller.value.size);
       });
-      await previousVideoController?.dispose();
     } catch (_) {
-      await nextVideoController?.dispose();
-      if (mounted) {
+      await controller.dispose();
+      if (mounted && selectionVersion == _selectionVersion) {
         setState(() {
           _picking = false;
-          _error = '读取文件失败，请重试';
+          _error = '读取视频失败，请重试';
         });
       }
     }
@@ -220,6 +255,7 @@ class _StoragePageState extends State<StoragePage> {
 
   @override
   void dispose() {
+    _selectionVersion += 1;
     _scrollController.dispose();
     unawaited(_videoController?.dispose());
     super.dispose();
@@ -374,7 +410,7 @@ class _StoragePageState extends State<StoragePage> {
               Expanded(
                 child: _MetadataTile(
                   label: 'size',
-                  value: _formatBytes(_fileBytes),
+                  value: _fileBytes == 0 ? '--' : _formatBytes(_fileBytes),
                   compact: true,
                 ),
               ),
@@ -402,18 +438,43 @@ class _StoragePageState extends State<StoragePage> {
       ),
       child: switch ((_file, _isImage)) {
         (null, _) => const _EmptyPickerContent(),
-        (_, true) =>
-          _imageBytes == null
-              ? const _PreviewErrorIcon(icon: Icons.image_outlined)
-              : Image.memory(
-                  _imageBytes!,
-                  key: const ValueKey<String>('storage-image-preview'),
-                  fit: BoxFit.contain,
-                  gaplessPlayback: true,
+        (final file?, true) => Image.file(
+          File(file.path),
+          key: const ValueKey<String>('storage-image-preview'),
+          fit: BoxFit.contain,
+          cacheWidth:
+              (MediaQuery.sizeOf(context).width *
+                      MediaQuery.devicePixelRatioOf(context))
+                  .round(),
+          filterQuality: FilterQuality.medium,
+          frameBuilder: (context, child, frame, synchronouslyLoaded) {
+            if (synchronouslyLoaded || frame != null) return child;
+            return const Center(
+              child: SizedBox.square(
+                dimension: 18,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: _orange,
                 ),
+              ),
+            );
+          },
+          errorBuilder: (_, _, _) =>
+              const _PreviewErrorIcon(icon: Icons.image_outlined),
+        ),
         (_, false) =>
           _videoController == null
-              ? const _PreviewErrorIcon(icon: Icons.movie_outlined)
+              ? _picking
+                    ? const Center(
+                        child: SizedBox.square(
+                          dimension: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: _orange,
+                          ),
+                        ),
+                      )
+                    : const _PreviewErrorIcon(icon: Icons.movie_outlined)
               : _LocalVideoPreview(controller: _videoController!),
       },
     ),
@@ -587,15 +648,17 @@ class _StoragePageState extends State<StoragePage> {
     return '正在上传图片';
   }
 
-  static Future<String> _imageResolution(Uint8List bytes) async {
-    final codec = await ui.instantiateImageCodec(bytes);
+  static Future<String> _imageResolution(String path) async {
+    final buffer = await ui.ImmutableBuffer.fromFilePath(path);
     try {
-      final frame = await codec.getNextFrame();
-      final resolution = '${frame.image.width} × ${frame.image.height}';
-      frame.image.dispose();
-      return resolution;
+      final descriptor = await ui.ImageDescriptor.encoded(buffer);
+      try {
+        return '${descriptor.width} × ${descriptor.height}';
+      } finally {
+        descriptor.dispose();
+      }
     } finally {
-      codec.dispose();
+      buffer.dispose();
     }
   }
 
