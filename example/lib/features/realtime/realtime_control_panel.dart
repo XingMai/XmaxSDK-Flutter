@@ -240,10 +240,10 @@ final class XLabRealtimeControlPanel extends StatelessWidget {
                 maxLines: 1,
                 textInputAction: TextInputAction.send,
                 onSubmitted: (_) => onPromptSubmit(),
-                style: const TextStyle(color: Colors.white, fontSize: 14),
+                style: const TextStyle(color: Colors.white, fontSize: 13),
                 decoration: const InputDecoration.collapsed(
                   hintText: '输入你想要的效果',
-                  hintStyle: TextStyle(color: Color(0x80FFFFFF), fontSize: 14),
+                  hintStyle: TextStyle(color: Color(0x80FFFFFF), fontSize: 13),
                 ),
               ),
             ),
