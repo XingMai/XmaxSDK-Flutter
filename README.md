@@ -205,7 +205,7 @@ apply the same host configuration when integrating XmaxSDK into another Android 
 ### Create a client
 
 ```dart
-import 'package:xmax_sdk/xmax_sdk.dart';
+import 'package:xmax_sdk/XmaxSDK.dart';
 
 final client = XmaxClient(
   configuration: XmaxConfiguration(apiKey: 'YOUR_API_KEY'),

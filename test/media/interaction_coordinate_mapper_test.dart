@@ -1,7 +1,7 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:xmax_sdk/src/foundation/media/video/video_content_mode.dart';
-import 'package:xmax_sdk/src/media/interaction/interaction_coordinate_mapper.dart';
+import 'package:xmax_sdk/src/foundation/media/video/VideoContentMode.dart';
+import 'package:xmax_sdk/src/media/interaction/InteractionCoordinateMapper.dart';
 
 void main() {
   test('fit ignores points in letterbox and maps displayed pixels', () {

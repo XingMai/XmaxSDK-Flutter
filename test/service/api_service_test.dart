@@ -1,9 +1,9 @@
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:xmax_sdk/src/service/network/api_service.dart';
-import 'package:xmax_sdk/src/service/network/api_servicing.dart';
-import 'package:xmax_sdk/xmax_sdk.dart';
+import 'package:xmax_sdk/src/service/network/ApiService.dart';
+import 'package:xmax_sdk/src/service/network/ApiServicing.dart';
+import 'package:xmax_sdk/XmaxSDK.dart';
 
 void main() {
   test('ApiService sends X-Api-Key and decodes data envelope', () async {

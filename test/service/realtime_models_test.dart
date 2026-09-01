@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:xmax_sdk/xmax_sdk.dart';
+import 'package:xmax_sdk/XmaxSDK.dart';
 
 void main() {
   test('public enum values match iOS raw values', () {

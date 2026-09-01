@@ -40,7 +40,7 @@
 
 ## 3. 首版公开入口
 
-`lib/xmax_sdk.dart` 只导出本文件列出的公开类型。`lib/src` 下的 Controller、Service、Foundation adapter 和第三方类型默认不导出。
+`lib/XmaxSDK.dart` 只导出本文件列出的公开类型。`lib/src` 下的 Controller、Service、Foundation adapter 和第三方类型默认不导出。
 
 ## 4. SDK 信息
 
@@ -703,7 +703,7 @@ abstract interface class TrajectoryEffectRendering {
 
 ## 16. 不得公开的类型
 
-以下类型即使内部存在，也不得从 `xmax_sdk.dart` 导出：
+以下类型即使内部存在，也不得从 `XmaxSDK.dart` 导出：
 
 - `RtcManager`
 - `RtcManaging`
@@ -729,7 +729,7 @@ abstract interface class TrajectoryEffectRendering {
 3. 检查全部 enum value。
 4. 检查 listener 清除语义。
 5. 检查 async 取消、错误和幂等语义。
-6. 检查 `lib/xmax_sdk.dart` 导出集合。
+6. 检查 `lib/XmaxSDK.dart` 导出集合。
 7. 对 Dart 重载折叠运行全部调用形态测试。
 8. 未实现能力不得出现占位公开 API。
 

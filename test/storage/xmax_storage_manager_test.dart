@@ -1,10 +1,10 @@
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:xmax_sdk/src/core/storage/xmax_storage_manager.dart';
-import 'package:xmax_sdk/src/foundation/storage/storage_models.dart';
-import 'package:xmax_sdk/src/service/storage/storage_servicing.dart';
-import 'package:xmax_sdk/xmax_sdk.dart';
+import 'package:xmax_sdk/src/core/storage/XmaxStorageManager.dart';
+import 'package:xmax_sdk/src/foundation/storage/StorageModels.dart';
+import 'package:xmax_sdk/src/service/storage/StorageServicing.dart';
+import 'package:xmax_sdk/XmaxSDK.dart';
 
 void main() {
   late _FakeStorageService service;

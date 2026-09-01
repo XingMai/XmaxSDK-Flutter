@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:xmax_sdk/xmax_sdk.dart';
+import 'package:xmax_sdk/XmaxSDK.dart';
 
 import '../../ui/xlab_theme.dart';
 import '../realtime/realtime_page.dart';

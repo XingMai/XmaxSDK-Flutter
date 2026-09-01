@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:xmax_sdk/src/core/realtime/xmax_realtime_generation_manager.dart';
+import 'package:xmax_sdk/src/core/realtime/XmaxRealtimeGenerationManager.dart';
 
 void main() {
   test('task IDs use iOS-compatible base64url UUID representation', () {

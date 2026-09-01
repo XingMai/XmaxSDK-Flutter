@@ -1,7 +1,7 @@
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:xmax_sdk/xmax_sdk.dart';
+import 'package:xmax_sdk/XmaxSDK.dart';
 
 import '../../ui/xlab_theme.dart';
 

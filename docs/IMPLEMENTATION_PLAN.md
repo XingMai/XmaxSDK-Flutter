@@ -116,15 +116,16 @@ dependencies:
 
 ### 5.1 目录
 
-Dart 文件使用 `lower_snake_case`，层级、类型职责和 iOS 保持一致。
+SDK Dart 文件使用首字母大写的驼峰命名，并与 iOS 文件名保持一致；
+Example 与测试代码继续使用 Flutter 标准的 `lower_snake_case`。
 
 ```text
 lib/
-├── xmax_sdk.dart
+├── XmaxSDK.dart
 └── src/
     ├── core/
-    │   ├── xmax_client.dart
-    │   ├── xmax_configuration.dart
+    │   ├── XmaxClient.dart
+    │   ├── XmaxConfiguration.dart
     │   ├── realtime/
     │   └── storage/
     ├── foundation/
@@ -139,13 +140,13 @@ lib/
     ├── media/
     │   ├── camera/
     │   ├── interaction/
-    │   ├── media_controller.dart
-    │   └── media_controlling.dart
+    │   ├── MediaController.dart
+    │   └── MediaControlling.dart
     ├── render/
     │   ├── trajectory/
     │   ├── video/
-    │   ├── render_controller.dart
-    │   └── render_controlling.dart
+    │   ├── RenderController.dart
+    │   └── RenderControlling.dart
     ├── service/
     │   ├── media/
     │   ├── network/
@@ -155,10 +156,10 @@ lib/
     │   ├── encoding/
     │   ├── quality/
     │   ├── room/
-    │   ├── stream_controller.dart
-    │   ├── stream_controlling.dart
-    │   └── stream_id.dart
-    └── xmax_sdk_info.dart
+    │   ├── StreamController.dart
+    │   ├── StreamControlling.dart
+    │   └── StreamID.dart
+    └── XmaxSDKInfo.dart
 ```
 
 ### 5.2 分层职责
@@ -524,7 +525,7 @@ SDK 负责检查和请求运行时权限；宿主负责平台用途说明和最�
 - 创建标准单数目录 `example/`，仅生成 iOS 和 Android 宿主。
 - Example 通过 `path: ../` 接入根 Package。
 - 配置 analyzer、format、test、integration_test。
-- 创建公开入口 `lib/xmax_sdk.dart` 和 iOS 对齐的目录骨架。
+- 创建公开入口 `lib/XmaxSDK.dart` 和 iOS 对齐的目录骨架。
 - 建立公开 API 对照测试/清单。
 - 锁定第三方依赖。
 - 创建首页、摄像头实时页和 Storage 页的路由骨架。

@@ -75,7 +75,7 @@ Flutter/
 ├── README.md
 ├── pubspec.yaml
 ├── lib/
-│   ├── xmax_sdk.dart
+│   ├── XmaxSDK.dart
 │   └── src/
 │       ├── core/
 │       ├── foundation/
@@ -83,7 +83,7 @@ Flutter/
 │       ├── render/
 │       ├── service/
 │       ├── stream/
-│       └── xmax_sdk_info.dart
+│       └── XmaxSDKInfo.dart
 ├── test/
 ├── example/
 └── docs/
@@ -323,7 +323,7 @@ Flutter 3.47.1 使用 AGP 9.1，而 COS 1.2.9 与火山 Flutter 3.60.6 的插件
 1. 在当前根目录生成 `xmax_sdk` Package。
 2. 合并现有 `docs/`，不覆盖设计文档。
 3. 配置 Dart/Flutter SDK 约束和第三方依赖。
-4. 创建 `lib/xmax_sdk.dart` 与 iOS 对齐的目录骨架。
+4. 创建 `lib/XmaxSDK.dart` 与 iOS 对齐的目录骨架。
 5. 配置 format、analyze 和 unit test。
 
 ### 0C：创建 Example
@@ -356,7 +356,7 @@ fvm flutter build ios --debug --no-codesign
 - `.fvmrc` 固定 Flutter 3.47.1。
 - `flutter doctor -v` 没有影响 iOS/Android 构建的错误。
 - 根 Package 和 Example 均通过 format、analyze、test。
-- Example 只能通过 `package:xmax_sdk/xmax_sdk.dart` 引用 SDK。
+- Example 只能通过 `package:xmax_sdk/XmaxSDK.dart` 引用 SDK。
 - Android Debug APK 构建成功。
 - iOS 无签名 Debug 构建成功，并完成一次签名真机启动。
 - 火山 RTC 和腾讯 COS 插件在两端完成注册，无 `MissingPluginException`。

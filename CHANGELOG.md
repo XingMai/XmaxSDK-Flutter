@@ -2,6 +2,7 @@
 
 ## 1.0.0
 
+- SDK Dart 文件名与 iOS 对齐为首字母大写驼峰，Example 保持 Flutter snake_case。
 - 实现与 iOS 对齐的 XmaxClient、实时 Manager、Session 和状态机。
 - 接入火山 RTC 摄像头采集、本地/远端渲染、视频发布及远端音频订阅。
 - 实现多点轨迹采集、坐标映射、默认效果和自定义 Renderer。
