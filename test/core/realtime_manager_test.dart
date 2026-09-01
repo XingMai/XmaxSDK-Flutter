@@ -359,8 +359,6 @@ final class _FakeStream implements StreamControlling {
   @override
   bool get hasGenerationTask => generation;
   @override
-  Future<void> activateRemoteAudio() async {}
-  @override
   Future<GenerationStartConfirmation> beginGeneration({
     required String taskID,
     required RealtimeVideoFormat videoFormat,

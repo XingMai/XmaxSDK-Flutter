@@ -63,12 +63,10 @@ final class StreamController implements StreamControlling {
   String _botName = '';
   bool _localVideoPublished = false;
   final Set<String> _remoteVideoSubscriptions = <String>{};
-  final Set<String> _remoteAudioSubscriptions = <String>{};
   RemoteStream? _activeRemoteStream;
   String? _generationTaskID;
   Completer<void>? _generationCompleter;
   Timer? _generationTimer;
-  int _remoteAudioVolume = 100;
 
   @override
   bool get hasGenerationTask => _generationTaskID != null;
@@ -88,18 +86,7 @@ final class StreamController implements StreamControlling {
   }
 
   @override
-  Future<void> setRemoteAudioVolume(double volume) async {
-    final rtcVolume = (volume * 100).round();
-
-    for (final streamID in _remoteAudioSubscriptions) {
-      await _rtcManager.setRemoteAudioVolume(
-        volume: rtcVolume,
-        streamID: streamID,
-      );
-    }
-
-    _remoteAudioVolume = rtcVolume;
-  }
+  Future<void> setRemoteAudioVolume(double volume) async {}
 
   @override
   Future<void> connect({
@@ -124,16 +111,6 @@ final class StreamController implements StreamControlling {
     // Stop the generation handshake before changing RTC subscriptions.
     await _clearGeneration(notifyRemote: true);
 
-    for (final streamID in _remoteAudioSubscriptions.toList()) {
-      await _safe(
-        '取消订阅 RTC 远端音频失败 (Failed to Unsubscribe from RTC Remote Audio)',
-        () => _rtcManager.subscribeRemoteAudio(
-          streamID: streamID,
-          subscribe: false,
-        ),
-      );
-    }
-
     for (final streamID in _remoteVideoSubscriptions.toList()) {
       await _safe(
         '取消订阅 RTC 远端视频失败 (Failed to Unsubscribe from RTC Remote Video)',
@@ -151,7 +128,6 @@ final class StreamController implements StreamControlling {
       );
     }
 
-    _remoteAudioSubscriptions.clear();
     _remoteVideoSubscriptions.clear();
     _localVideoPublished = false;
     _roomID = '';
@@ -240,28 +216,6 @@ final class StreamController implements StreamControlling {
   }
 
   @override
-  Future<void> activateRemoteAudio() async {
-    final stream = _activeRemoteStream;
-    if (stream == null || _generationTaskID == null) {
-      throw const XmaxError(
-        code: XmaxErrorCode.rtcError,
-        message: 'Remote generation audio stream is unavailable',
-      );
-    }
-
-    if (_remoteAudioSubscriptions.add(stream.streamID)) {
-      await _rtcManager.setRemoteAudioVolume(
-        volume: _remoteAudioVolume,
-        streamID: stream.streamID,
-      );
-      await _rtcManager.subscribeRemoteAudio(
-        streamID: stream.streamID,
-        subscribe: true,
-      );
-    }
-  }
-
-  @override
   Future<void> updateGeneration({
     required String taskID,
     required RealtimeVideoFormat videoFormat,
@@ -346,7 +300,6 @@ final class StreamController implements StreamControlling {
       return;
     }
 
-    // A matching SEI selects the stream for the pending generation task.
     _activeRemoteStream = stream;
     _remoteStreamListener?.call(stream);
     _generationTimer?.cancel();
@@ -389,18 +342,6 @@ final class StreamController implements StreamControlling {
 
     _generationTaskID = null;
     _activeRemoteStream = null;
-
-    for (final streamID in _remoteAudioSubscriptions.toList()) {
-      await _safe(
-        '取消订阅 RTC 远端音频失败 (Failed to Unsubscribe from RTC Remote Audio)',
-        () => _rtcManager.subscribeRemoteAudio(
-          streamID: streamID,
-          subscribe: false,
-        ),
-      );
-    }
-
-    _remoteAudioSubscriptions.clear();
 
     if (notifyRemote) {
       _clearRemoteStream();

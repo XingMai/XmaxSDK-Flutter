@@ -37,7 +37,6 @@ abstract interface class StreamControlling {
     required RealtimeVideoFormat videoFormat,
     required RealtimeContext context,
   });
-  Future<void> activateRemoteAudio();
   Future<void> updateGeneration({
     required String taskID,
     required RealtimeVideoFormat videoFormat,

@@ -428,8 +428,8 @@ final class XmaxRealtimeManager implements XmaxRealtimeManaging {
       ),
     );
 
-    // Waiting for the first decoded frame must not block later condition
-    // changes. Only the short task mutation above is serialized.
+    // Waiting for the SEI confirmation must not block later condition changes.
+    // Only the short task mutation above is serialized.
     await prepared.readiness;
     return prepared.remoteStream;
   }
@@ -556,8 +556,6 @@ final class XmaxRealtimeManager implements XmaxRealtimeManaging {
     required Completer<void> completer,
   }) async {
     try {
-      await _streamController.activateRemoteAudio();
-
       _ensureCurrent(operationVersion);
       if (_connectionManager.currentSessionID != sessionID) {
         throw const XmaxError(
@@ -617,8 +615,8 @@ final class XmaxRealtimeManager implements XmaxRealtimeManaging {
         _state.connectionState == RealtimeConnectionState.generating ||
         _startingGenerationTaskID != null;
 
-    // Prevent an in-flight first-frame waiter from publishing `generating`
-    // after this stop has already completed.
+    // Prevent an in-flight SEI confirmation from publishing `generating` after
+    // this stop has already completed.
     _operationVersion += 1;
     _generationRequestVersion += 1;
     _cancelStartingGeneration();
