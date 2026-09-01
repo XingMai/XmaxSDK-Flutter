@@ -873,12 +873,12 @@ final class _SuccessPill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-    height: 26,
+    height: 22,
     padding: const EdgeInsets.symmetric(horizontal: 8),
     alignment: Alignment.center,
     decoration: BoxDecoration(
       color: _orange.withValues(alpha: 0.08),
-      borderRadius: BorderRadius.circular(9),
+      borderRadius: BorderRadius.circular(99),
       border: Border.all(color: _orange.withValues(alpha: 0.28)),
     ),
     child: const Text(
@@ -907,7 +907,7 @@ final class _CompactOutlineButton extends StatelessWidget {
   Widget build(BuildContext context) => Opacity(
     opacity: enabled ? 1 : 0.6,
     child: SizedBox(
-      height: 26,
+      height: 22,
       child: TextButton(
         onPressed: enabled ? onPressed : null,
         style: TextButton.styleFrom(
@@ -919,7 +919,7 @@ final class _CompactOutlineButton extends StatelessWidget {
           minimumSize: Size.zero,
           tapTargetSize: MaterialTapTargetSize.shrinkWrap,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(9),
+            borderRadius: BorderRadius.circular(99),
             side: BorderSide(color: _orange.withValues(alpha: 0.28)),
           ),
           textStyle: const TextStyle(fontSize: 8, fontWeight: FontWeight.w700),
