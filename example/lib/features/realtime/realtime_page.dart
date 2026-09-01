@@ -49,6 +49,8 @@ class _RealtimePageState extends State<RealtimePage>
   bool _cameraReady = false;
   bool _busy = false;
   bool _isLoading = true;
+  Animation<double>? _routeAnimation;
+  bool _hasScheduledInitialCameraStart = false;
   final _referenceUploadTokens = <String, Object>{};
   late final _XLabTrajectoryRenderer? _customRenderer = widget.customTrajectory
       ? _XLabTrajectoryRenderer()
@@ -64,7 +66,43 @@ class _RealtimePageState extends State<RealtimePage>
     WidgetsBinding.instance.addObserver(this);
     unawaited(_loadReferences());
     _configureManager();
-    unawaited(_startCamera());
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+
+    final animation = ModalRoute.of(context)?.animation;
+    if (identical(animation, _routeAnimation)) {
+      return;
+    }
+
+    _routeAnimation?.removeStatusListener(_routeAnimationDidChange);
+    _routeAnimation = animation;
+    animation?.addStatusListener(_routeAnimationDidChange);
+
+    if (animation == null || animation.status == AnimationStatus.completed) {
+      _scheduleInitialCameraStart();
+    }
+  }
+
+  void _routeAnimationDidChange(AnimationStatus status) {
+    if (status == AnimationStatus.completed) {
+      _scheduleInitialCameraStart();
+    }
+  }
+
+  void _scheduleInitialCameraStart() {
+    if (_hasScheduledInitialCameraStart) {
+      return;
+    }
+
+    _hasScheduledInitialCameraStart = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        unawaited(_startCamera());
+      }
+    });
   }
 
   Future<void> _loadReferences() async {
@@ -429,6 +467,7 @@ class _RealtimePageState extends State<RealtimePage>
 
   @override
   void dispose() {
+    _routeAnimation?.removeStatusListener(_routeAnimationDidChange);
     WidgetsBinding.instance.removeObserver(this);
     _manager.setStateListener(null);
     _manager.setErrorListener(null);

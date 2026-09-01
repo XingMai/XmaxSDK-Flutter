@@ -30,7 +30,7 @@
         tools:node="remove" />
 
     <application
-        android:label="XmaxSDK Example"
+        android:label="XLab"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <service
@@ -49,6 +49,7 @@
             android:launchMode="singleTop"
             android:taskAffinity=""
             android:theme="@style/LaunchTheme"
+            android:screenOrientation="portrait"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
             android:hardwareAccelerated="true"
             android:windowSoftInputMode="adjustResize">

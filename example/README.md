@@ -1,6 +1,6 @@
-# XmaxSDK Example
+# XLab
 
-XmaxSDK Flutter 的 iOS/Android 接入示例和真机集成测试宿主。
+XLab 是 XmaxSDK Flutter 的 iOS/Android 接入示例和真机集成测试宿主。
 
 ```shell
 fvm flutter pub get

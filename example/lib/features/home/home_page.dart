@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -24,6 +25,12 @@ class _HomePageState extends State<HomePage> {
   final _apiKeyController = TextEditingController();
   final _preferences = SharedPreferencesAsync();
   bool _obscureApiKey = true;
+
+  String get _minimumOS => switch (defaultTargetPlatform) {
+    TargetPlatform.android => 'Android 8.0+',
+    TargetPlatform.iOS => 'iOS 15+',
+    _ => 'Android / iOS',
+  };
 
   @override
   void initState() {
@@ -88,24 +95,24 @@ class _HomePageState extends State<HomePage> {
             padding: const EdgeInsets.fromLTRB(18, 20, 18, 32),
             children: <Widget>[
               const XLabTopBar(
-                title: 'XMAXSDK',
+                title: 'XLAB',
                 accent: XLabPalette.mint,
                 version: XmaxSDKInfo.version,
               ),
               const SizedBox(height: 34),
               _hero(),
               const SizedBox(height: 12),
-              const Row(
+              Row(
                 children: <Widget>[
-                  Expanded(
+                  const Expanded(
                     child: _Metric(label: 'RUNTIME', value: 'Flutter'),
                   ),
-                  SizedBox(width: 8),
+                  const SizedBox(width: 8),
                   Expanded(
-                    child: _Metric(label: 'MIN OS', value: 'iOS 15+'),
+                    child: _Metric(label: 'MIN OS', value: _minimumOS),
                   ),
-                  SizedBox(width: 8),
-                  Expanded(
+                  const SizedBox(width: 8),
+                  const Expanded(
                     child: _Metric(label: 'LATEST MODEL', value: 'X2.0'),
                   ),
                 ],

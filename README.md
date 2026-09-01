@@ -395,9 +395,9 @@ final client = XmaxClient(
 
 Logging configuration is process-wide and shared by all `XmaxClient` instances.
 
-## Example Project
+## XLab Example App
 
-A runnable iOS and Android reference application is available in [`example`](example).
+XLab is the runnable iOS and Android reference application in [`example`](example).
 It demonstrates camera generation, camera switching, live prompt updates, default
 and custom trajectory rendering, storage upload, image safety checks, state and
 quality monitoring, and lifecycle-aware resource cleanup.

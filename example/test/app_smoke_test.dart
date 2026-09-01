@@ -12,11 +12,12 @@ void main() {
           'xlab.realtime.apiKey': 'cached-api-key',
         });
     addTearDown(() => SharedPreferencesAsyncPlatform.instance = null);
-    await tester.pumpWidget(const XmaxSdkExampleApp());
+    await tester.pumpWidget(const XLabApp());
     await tester.pumpAndSettle();
 
-    expect(find.text('XMAXSDK'), findsOneWidget);
+    expect(find.text('XLAB'), findsOneWidget);
     expect(find.text('v1.0.0'), findsOneWidget);
+    expect(find.text('Android 8.0+'), findsOneWidget);
     final apiKeyField = tester.widget<TextField>(
       find.byKey(const ValueKey<String>('api-key-field')),
     );

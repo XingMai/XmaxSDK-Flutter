@@ -3,14 +3,14 @@ import 'package:flutter/material.dart';
 import 'features/home/home_page.dart';
 import 'ui/xlab_theme.dart';
 
-class XmaxSdkExampleApp extends StatelessWidget {
-  const XmaxSdkExampleApp({super.key});
+class XLabApp extends StatelessWidget {
+  const XLabApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'XmaxSDK Example',
+      title: 'XLab',
       theme: ThemeData(
         brightness: Brightness.dark,
         colorScheme: ColorScheme.fromSeed(
