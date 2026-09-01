@@ -132,6 +132,26 @@ void main() {
 
     expect(find.byType(CircularProgressIndicator), findsOneWidget);
 
+    final previewOpacity = tester.widget<Opacity>(
+      find
+          .ancestor(
+            of: find.byKey(const ValueKey('prompt-reference-preview')),
+            matching: find.byType(Opacity),
+          )
+          .first,
+    );
+    final submitOpacity = tester.widget<Opacity>(
+      find
+          .ancestor(
+            of: find.byIcon(Icons.arrow_upward_rounded),
+            matching: find.byType(Opacity),
+          )
+          .first,
+    );
+
+    expect(previewOpacity.opacity, 1);
+    expect(submitOpacity.opacity, 0.2);
+
     await tester.tap(find.byKey(const ValueKey('prompt-reference-preview')));
     await tester.tap(find.byIcon(Icons.arrow_upward_rounded));
 

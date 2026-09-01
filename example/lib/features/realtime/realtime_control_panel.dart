@@ -256,6 +256,7 @@ final class XLabRealtimeControlPanel extends StatelessWidget {
                 XLabRealtimeReferenceUploadState.ready => '移除参考图',
               },
               backgroundColor: const Color(0x1FFFFFFF),
+              disabledOpacity: 1,
               onPressed:
                   busy ||
                       promptReference?.uploadState ==
@@ -462,6 +463,8 @@ final class _PromptReferencePreview extends StatelessWidget {
         _ReferenceUploadOverlay(
           state: reference.uploadState,
           borderRadius: BorderRadius.circular(14),
+          indicatorDimension: 13,
+          retryIconSize: 14,
         ),
       ],
     ),
@@ -472,11 +475,15 @@ final class _ReferenceUploadOverlay extends StatelessWidget {
   const _ReferenceUploadOverlay({
     required this.state,
     required this.borderRadius,
+    this.indicatorDimension = 16,
+    this.retryIconSize = 20,
     super.key,
   });
 
   final XLabRealtimeReferenceUploadState state;
   final BorderRadius borderRadius;
+  final double indicatorDimension;
+  final double retryIconSize;
 
   @override
   Widget build(BuildContext context) {
@@ -487,20 +494,20 @@ final class _ReferenceUploadOverlay extends StatelessWidget {
     return ClipRRect(
       borderRadius: borderRadius,
       child: ColoredBox(
-        color: Colors.black.withValues(alpha: 0.48),
+        color: Colors.black.withValues(alpha: 0.42),
         child: Center(
           child: state == XLabRealtimeReferenceUploadState.uploading
-              ? const SizedBox.square(
-                  dimension: 16,
-                  child: CircularProgressIndicator(
+              ? SizedBox.square(
+                  dimension: indicatorDimension,
+                  child: const CircularProgressIndicator(
                     strokeWidth: 1.8,
                     color: Colors.white,
                   ),
                 )
-              : const Icon(
+              : Icon(
                   Icons.refresh_rounded,
                   color: Colors.white,
-                  size: 18,
+                  size: retryIconSize,
                 ),
         ),
       ),
@@ -559,16 +566,18 @@ final class _CircleAction extends StatelessWidget {
     required this.onPressed,
     required this.child,
     this.backgroundColor = const Color(0xFF3A3A3C),
+    this.disabledOpacity = 0.2,
   });
 
   final String tooltip;
   final VoidCallback? onPressed;
   final Widget child;
   final Color backgroundColor;
+  final double disabledOpacity;
 
   @override
   Widget build(BuildContext context) => Opacity(
-    opacity: onPressed == null ? 0.2 : 1,
+    opacity: onPressed == null ? disabledOpacity : 1,
     child: SizedBox(
       width: 28,
       height: 28,
