@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
@@ -7,16 +8,19 @@ import 'package:xmax_sdk/XmaxSDK.dart';
 import '../../ui/xlab_theme.dart';
 import 'realtime_control_panel.dart';
 import 'realtime_loading_overlay.dart';
+import 'realtime_local_input.dart';
 
 class RealtimePage extends StatefulWidget {
   const RealtimePage({
     required this.apiKey,
     this.customTrajectory = false,
+    this.localInput,
     super.key,
   });
 
   final String apiKey;
   final bool customTrajectory;
+  final XLabRealtimeLocalInput? localInput;
 
   @override
   State<RealtimePage> createState() => _RealtimePageState();
@@ -62,7 +66,12 @@ class _RealtimePageState extends State<RealtimePage>
     super.initState();
     _panelMode = widget.customTrajectory
         ? XLabRealtimePanelMode.touch
+        : widget.localInput is XLabRealtimeImageInput
+        ? XLabRealtimePanelMode.touch
         : XLabRealtimePanelMode.character;
+    if (widget.localInput != null) {
+      _isLoading = false;
+    }
     _promptController.addListener(_promptDidChange);
     WidgetsBinding.instance.addObserver(this);
     unawaited(_loadReferences());
@@ -94,7 +103,7 @@ class _RealtimePageState extends State<RealtimePage>
   }
 
   void _scheduleInitialCameraStart() {
-    if (_hasScheduledInitialCameraStart) {
+    if (_hasScheduledInitialCameraStart || widget.localInput != null) {
       return;
     }
 
@@ -489,7 +498,9 @@ class _RealtimePageState extends State<RealtimePage>
     if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.detached) {
       unawaited(_suspend());
-    } else if (state == AppLifecycleState.resumed && _localStream == null) {
+    } else if (state == AppLifecycleState.resumed &&
+        _localStream == null &&
+        widget.localInput == null) {
       unawaited(_startCamera());
     }
   }
@@ -529,6 +540,10 @@ class _RealtimePageState extends State<RealtimePage>
   Widget build(BuildContext context) {
     final generating =
         _state.connectionState == RealtimeConnectionState.generating;
+    final localImage = switch (widget.localInput) {
+      XLabRealtimeImageInput input => input,
+      _ => null,
+    };
     return Scaffold(
       resizeToAvoidBottomInset: true,
       backgroundColor: const Color(0xFF101010),
@@ -554,6 +569,21 @@ class _RealtimePageState extends State<RealtimePage>
                         ),
                       ),
                     ),
+                    if (_localStream == null && localImage != null)
+                      Image.file(
+                        File(localImage.path),
+                        key: const ValueKey<String>(
+                          'realtime-local-image-preview',
+                        ),
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, _, _) => const Center(
+                          child: Icon(
+                            Icons.broken_image_outlined,
+                            color: Color(0x55FFFFFF),
+                            size: 44,
+                          ),
+                        ),
+                      ),
                     XmaxRealtimeVideoView(
                       localTrack: _localStream?.videoTrack,
                       remoteTrack: _remoteStream?.videoTrack,
@@ -563,7 +593,7 @@ class _RealtimePageState extends State<RealtimePage>
                           _panelMode == XLabRealtimePanelMode.touch,
                       trajectoryRenderer: _customRenderer,
                     ),
-                    if (_localStream?.videoTrack == null)
+                    if (_localStream?.videoTrack == null && localImage == null)
                       const Center(
                         child: Icon(
                           Icons.videocam_off_outlined,
@@ -613,22 +643,27 @@ class _RealtimePageState extends State<RealtimePage>
                       icon: const Icon(
                         Icons.arrow_back_rounded,
                         color: Colors.white,
-                        size: 32,
+                        size: 22,
                         shadows: <Shadow>[
-                          Shadow(color: Colors.black54, blurRadius: 4),
+                          Shadow(
+                            color: Colors.black54,
+                            blurRadius: 2,
+                            offset: Offset(0, 1),
+                          ),
                         ],
                       ),
                     ),
                   ),
                 ),
-                Positioned(
-                  right: 8,
-                  top: 6,
-                  child: _CameraActionButton(
-                    enabled: !_busy && _localStream != null,
-                    onPressed: _switchCamera,
+                if (widget.localInput == null)
+                  Positioned(
+                    right: 8,
+                    top: 6,
+                    child: _CameraActionButton(
+                      enabled: !_busy && _localStream != null,
+                      onPressed: _switchCamera,
+                    ),
                   ),
-                ),
               ],
             ),
           ),
@@ -686,8 +721,14 @@ final class _CameraActionButton extends StatelessWidget {
             Icon(
               Icons.sync_rounded,
               color: Colors.white,
-              size: 28,
-              shadows: <Shadow>[Shadow(color: Colors.black54, blurRadius: 4)],
+              size: 22,
+              shadows: <Shadow>[
+                Shadow(
+                  color: Colors.black54,
+                  blurRadius: 2,
+                  offset: Offset(0, 1),
+                ),
+              ],
             ),
             SizedBox(height: 5),
             Text(
@@ -696,7 +737,13 @@ final class _CameraActionButton extends StatelessWidget {
                 color: Colors.white,
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
-                shadows: <Shadow>[Shadow(color: Colors.black54, blurRadius: 4)],
+                shadows: <Shadow>[
+                  Shadow(
+                    color: Colors.black54,
+                    blurRadius: 2,
+                    offset: Offset(0, 1),
+                  ),
+                ],
               ),
             ),
           ],

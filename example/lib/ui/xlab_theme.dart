@@ -5,6 +5,7 @@ abstract final class XLabPalette {
   static const surface = Color(0xFF111820);
   static const mint = Color(0xFF8EF0C8);
   static const blue = Color(0xFF78A9FF);
+  static const purple = Color(0xFFC9A3FF);
   static const pink = Color(0xFFFF8FD8);
   static const orange = Color(0xFFF5B86C);
   static const primaryText = Color(0xFFF4F7FB);

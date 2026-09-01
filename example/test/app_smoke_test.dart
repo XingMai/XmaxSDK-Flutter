@@ -40,6 +40,7 @@ void main() {
       scrollable: find.byType(Scrollable).first,
     );
     expect(find.text('摄像头实时流'), findsOneWidget);
+    expect(find.text('图片生成管线'), findsNothing);
     await tester.scrollUntilVisible(
       find.text('存储服务'),
       300,

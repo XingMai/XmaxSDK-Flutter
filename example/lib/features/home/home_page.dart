@@ -2,16 +2,20 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:xmax_sdk/XmaxSDK.dart';
 
 import '../../ui/xlab_theme.dart';
+import '../realtime/realtime_local_input.dart';
 import '../realtime/realtime_page.dart';
 import '../storage/storage_page.dart';
 
 class HomePage extends StatefulWidget {
-  const HomePage({super.key});
+  const HomePage({this.pickImage, super.key});
+
+  final Future<XFile?> Function()? pickImage;
 
   @override
   State<HomePage> createState() => _HomePageState();
@@ -19,12 +23,14 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   static const _apiKeyStorageKey = 'xlab.realtime.apiKey';
+  static const _isImagePipelineEnabled = false;
   static final _apiKeyApplicationURL = Uri.parse(
     'https://platform.xmaxai.com/api-keys',
   );
   final _apiKeyController = TextEditingController();
   final _preferences = SharedPreferencesAsync();
   bool _obscureApiKey = true;
+  bool _isPickingImage = false;
 
   String get _minimumOS => switch (defaultTargetPlatform) {
     TargetPlatform.android => 'Android 8.0+',
@@ -71,18 +77,61 @@ class _HomePageState extends State<HomePage> {
     super.dispose();
   }
 
-  void _open(Widget Function(String apiKey) builder) {
+  String? _apiKeyForNavigation() {
     final apiKey = _apiKeyController.text.trim();
     if (apiKey.isEmpty) {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('请先输入 API Key')));
-      return;
+      return null;
     }
     unawaited(_preferences.setString(_apiKeyStorageKey, apiKey));
+    return apiKey;
+  }
+
+  void _open(Widget Function(String apiKey) builder) {
+    final apiKey = _apiKeyForNavigation();
+    if (apiKey == null) return;
     Navigator.of(
       context,
     ).push(MaterialPageRoute<void>(builder: (_) => builder(apiKey)));
+  }
+
+  Future<void> _openImagePipeline() async {
+    if (_isPickingImage) return;
+
+    final apiKey = _apiKeyForNavigation();
+    if (apiKey == null) return;
+
+    _isPickingImage = true;
+    try {
+      final image =
+          await (widget.pickImage?.call() ??
+              ImagePicker().pickImage(
+                source: ImageSource.gallery,
+                requestFullMetadata: false,
+              ));
+      if (image == null || !mounted) return;
+
+      Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => RealtimePage(
+            apiKey: apiKey,
+            localInput: XLabRealtimeImageInput(
+              path: image.path,
+              name: image.name,
+            ),
+          ),
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('读取图片失败，请重试')));
+    } finally {
+      _isPickingImage = false;
+    }
   }
 
   @override
@@ -134,6 +183,18 @@ class _HomePageState extends State<HomePage> {
                 color: XLabPalette.mint,
                 onTap: () => _open((apiKey) => RealtimePage(apiKey: apiKey)),
               ),
+              if (_isImagePipelineEnabled) ...<Widget>[
+                const SizedBox(height: 14),
+                _PipelineCard(
+                  sequence: '03',
+                  mode: 'MODE_03 / IMAGE.FILE',
+                  title: '图片生成管线',
+                  subtitle: '选择本地图片，让静态画面持续流动起来。',
+                  capability: 'createLocalImageStream()',
+                  color: XLabPalette.purple,
+                  onTap: () => unawaited(_openImagePipeline()),
+                ),
+              ],
               const SizedBox(height: 30),
               const _SectionHeader(
                 title: 'SDK FEATURES',
