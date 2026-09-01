@@ -22,28 +22,19 @@ and interactive image animation directly into their apps.
 
 ## Features
 
-- Front and rear camera capture as the local RTC input
-- Camera-based real-time generation controlled by prompts, remote reference
-  URLs, and user interactions
-- Automatic local-preview and generated-output switching with
-  `XmaxRealtimeVideoView`
-- Multi-touch trajectory input with built-in and custom effect renderers
-- Camera switching during preview and active generation
-- Realtime state, error, network-quality, and performance listeners
-- Independent Xmax-managed object storage with safety checks and transfer
-  progress callbacks
-- A shared asynchronous Dart API for iOS and Android
+- Real-time video generation from live camera streams, guided by prompts,
+  reference images, and user interactions
+- In-application rendering of the local camera input and generated output
+- Multi-touch trajectory input for controlling subject movement in generated
+  video streams
+- Image and video transfer through Xmax-managed object storage
+- Asynchronous APIs based on Dart Futures
+- Flutter widget integration for iOS and Android
 
-### Not included in this release
-
-- Local image files as RTC media input
-- Local video files as RTC media input
-- Raw video-frame pipelines or video-frame interpolation
-- Platform-specific SwiftUI APIs
-
-Object storage is an independent file service. Uploading a local file does not
-turn that file into an RTC media stream. A generated task may use a supported
-remote reference URL through `RealtimeContext.referencePath`.
+This camera-focused release does not provide local still images or local video
+files as RTC input, raw video-frame pipelines, video-frame interpolation, or
+platform-specific SwiftUI APIs. Object storage is an independent file service;
+uploading a local file does not turn it into an RTC media stream.
 
 ## Requirements
 
