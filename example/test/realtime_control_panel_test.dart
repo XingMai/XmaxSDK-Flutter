@@ -103,6 +103,47 @@ void main() {
     expect(referenceActions, 1);
   });
 
+  testWidgets('free prompt dismisses the keyboard when tapping the page', (
+    tester,
+  ) async {
+    final controller = TextEditingController();
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(
+      _TestApp(
+        child: XLabRealtimeControlPanel(
+          mode: XLabRealtimePanelMode.free,
+          generating: false,
+          busy: false,
+          promptController: controller,
+          referencesByCategory: const <String, List<XLabRealtimeReference>>{},
+          selectedReference: null,
+          onModeChanged: (_) {},
+          onStop: () {},
+          onReferenceChanged: (_) {},
+          onAddReference: () {},
+          onTouchStart: () {},
+          onPromptSubmit: () {},
+          onPromptReference: () {},
+        ),
+      ),
+    );
+
+    await tester.tap(find.byType(TextField));
+    await tester.pump();
+    expect(
+      tester.widget<EditableText>(find.byType(EditableText)).focusNode.hasFocus,
+      isTrue,
+    );
+
+    await tester.tapAt(const Offset(20, 20));
+    await tester.pump();
+    expect(
+      tester.widget<EditableText>(find.byType(EditableText)).focusNode.hasFocus,
+      isFalse,
+    );
+  });
+
   testWidgets('reference cells always report the concrete tapped item', (
     tester,
   ) async {
@@ -181,6 +222,58 @@ void main() {
 
     expect(taps, 1);
     expect(categoryChanges, 1);
+  });
+
+  testWidgets('control panel is dimmed and disabled before preview is ready', (
+    tester,
+  ) async {
+    final controller = TextEditingController();
+    addTearDown(controller.dispose);
+    final reference = _reference(
+      id: 'preview-pending',
+      referencePath: '/p.png',
+    );
+    var referenceTaps = 0;
+    var categoryChanges = 0;
+
+    await tester.pumpWidget(
+      _TestApp(
+        child: XLabRealtimeControlPanel(
+          mode: XLabRealtimePanelMode.character,
+          generating: false,
+          busy: false,
+          enabled: false,
+          promptController: controller,
+          referencesByCategory: <String, List<XLabRealtimeReference>>{
+            XLabRealtimePanelMode.character.id: <XLabRealtimeReference>[
+              reference,
+            ],
+          },
+          selectedReference: null,
+          onModeChanged: (_) => categoryChanges += 1,
+          onStop: () {},
+          onReferenceChanged: (_) => referenceTaps += 1,
+          onAddReference: () {},
+          onTouchStart: () {},
+          onPromptSubmit: () {},
+          onPromptReference: () {},
+        ),
+      ),
+    );
+
+    final opacity = tester.widget<Opacity>(
+      find.byKey(const ValueKey('realtime-control-panel-enabled-state')),
+    );
+    expect(opacity.opacity, 0.55);
+
+    await tester.tap(find.text('换装'), warnIfMissed: false);
+    await tester.tap(
+      find.byKey(const ValueKey('reference-preview-pending')),
+      warnIfMissed: false,
+    );
+
+    expect(categoryChanges, 0);
+    expect(referenceTaps, 0);
   });
 
   testWidgets('free reference blocks removal and submission while uploading', (

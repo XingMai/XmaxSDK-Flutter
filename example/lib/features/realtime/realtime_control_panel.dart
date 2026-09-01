@@ -83,6 +83,7 @@ final class XLabRealtimeControlPanel extends StatelessWidget {
     required this.mode,
     required this.generating,
     required this.busy,
+    this.enabled = true,
     required this.promptController,
     required this.referencesByCategory,
     required this.selectedReference,
@@ -100,6 +101,7 @@ final class XLabRealtimeControlPanel extends StatelessWidget {
   final XLabRealtimePanelMode mode;
   final bool generating;
   final bool busy;
+  final bool enabled;
   final TextEditingController promptController;
   final Map<String, List<XLabRealtimeReference>> referencesByCategory;
   final XLabRealtimeReference? selectedReference;
@@ -113,76 +115,85 @@ final class XLabRealtimeControlPanel extends StatelessWidget {
   final VoidCallback onPromptReference;
 
   @override
-  Widget build(BuildContext context) => ColoredBox(
-    color: const Color(0xFF101010),
-    child: Padding(
-      padding: EdgeInsets.only(
-        bottom: MediaQuery.viewPaddingOf(context).bottom + 16,
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: <Widget>[
-          const SizedBox(height: 6),
-          SizedBox(
-            height: 36,
-            child: Row(
-              children: <Widget>[
-                const SizedBox(width: 14),
-                SizedBox(
-                  width: 28,
-                  height: 36,
-                  child: IconButton(
-                    padding: EdgeInsets.zero,
-                    onPressed: generating && !busy ? onStop : null,
-                    icon: Icon(
-                      Icons.block,
-                      size: 16,
-                      color: Colors.white.withValues(
-                        alpha: generating ? 1 : 0.5,
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 11),
-                Expanded(
-                  child: ListView.separated(
-                    scrollDirection: Axis.horizontal,
-                    padding: const EdgeInsets.only(right: 14),
-                    itemCount: XLabRealtimePanelMode.values.length,
-                    separatorBuilder: (_, _) => const SizedBox(width: 16),
-                    itemBuilder: (context, index) {
-                      final item = XLabRealtimePanelMode.values[index];
-                      final selected = item == mode;
-                      return GestureDetector(
-                        behavior: HitTestBehavior.opaque,
-                        onTap: () => onModeChanged(item),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 4),
-                          child: Center(
-                            child: Text(
-                              item.label,
-                              style: TextStyle(
-                                color: Colors.white.withValues(
-                                  alpha: selected ? 1 : 0.48,
-                                ),
-                                fontSize: 12,
-                                fontWeight: selected
-                                    ? FontWeight.w600
-                                    : FontWeight.w400,
-                              ),
-                            ),
+  Widget build(BuildContext context) => Opacity(
+    key: const ValueKey<String>('realtime-control-panel-enabled-state'),
+    opacity: enabled ? 1 : 0.55,
+    child: IgnorePointer(
+      ignoring: !enabled,
+      child: ColoredBox(
+        color: const Color(0xFF101010),
+        child: Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.viewPaddingOf(context).bottom + 16,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              const SizedBox(height: 6),
+              SizedBox(
+                height: 36,
+                child: Row(
+                  children: <Widget>[
+                    const SizedBox(width: 14),
+                    SizedBox(
+                      width: 28,
+                      height: 36,
+                      child: IconButton(
+                        padding: EdgeInsets.zero,
+                        onPressed: generating && !busy ? onStop : null,
+                        icon: Icon(
+                          Icons.block,
+                          size: 16,
+                          color: Colors.white.withValues(
+                            alpha: generating ? 1 : 0.5,
                           ),
                         ),
-                      );
-                    },
-                  ),
+                      ),
+                    ),
+                    const SizedBox(width: 11),
+                    Expanded(
+                      child: ListView.separated(
+                        scrollDirection: Axis.horizontal,
+                        padding: const EdgeInsets.only(right: 14),
+                        itemCount: XLabRealtimePanelMode.values.length,
+                        separatorBuilder: (_, _) => const SizedBox(width: 16),
+                        itemBuilder: (context, index) {
+                          final item = XLabRealtimePanelMode.values[index];
+                          final selected = item == mode;
+                          return GestureDetector(
+                            behavior: HitTestBehavior.opaque,
+                            onTap: () => onModeChanged(item),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 4,
+                              ),
+                              child: Center(
+                                child: Text(
+                                  item.label,
+                                  style: TextStyle(
+                                    color: Colors.white.withValues(
+                                      alpha: selected ? 1 : 0.48,
+                                    ),
+                                    fontSize: 12,
+                                    fontWeight: selected
+                                        ? FontWeight.w600
+                                        : FontWeight.w400,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
+              ),
+              const SizedBox(height: 4),
+              SizedBox(height: 50, child: _categoryContents()),
+            ],
           ),
-          const SizedBox(height: 4),
-          SizedBox(height: 50, child: _categoryContents()),
-        ],
+        ),
       ),
     ),
   );
@@ -255,6 +266,8 @@ final class XLabRealtimeControlPanel extends StatelessWidget {
                 maxLines: 1,
                 textInputAction: TextInputAction.send,
                 onSubmitted: (_) => onPromptSubmit(),
+                onTapOutside: (_) =>
+                    FocusManager.instance.primaryFocus?.unfocus(),
                 style: const TextStyle(color: Colors.white, fontSize: 13),
                 decoration: const InputDecoration.collapsed(
                   hintText: '输入你想要的效果',

@@ -58,15 +58,24 @@ abstract final class RoomEvent {
     required String taskID,
     required RealtimeVideoFormat videoFormat,
     required RealtimeContext context,
-  }) => jsonEncode(<String, Object?>{
-    'event': event,
-    'params': <String, Object?>{
+  }) {
+    final params = <String, Object?>{
       'model': 'default',
       'size': <int>[videoFormat.width, videoFormat.height],
       'prompt': context.prompt,
-      'ref_image_path': context.referencePath,
-    },
-    'user_id': userID,
-    'uid': taskID,
-  });
+    };
+    final referencePath = context.referencePath;
+    if (referencePath != null) {
+      params['ref_image_path'] = referencePath;
+    }
+
+    // Match iOS and Android exactly: omitting `ref_image_path` clears the
+    // previous condition, while an explicit JSON null is ignored upstream.
+    return jsonEncode(<String, Object?>{
+      'event': event,
+      'params': params,
+      'user_id': userID,
+      'uid': taskID,
+    });
+  }
 }

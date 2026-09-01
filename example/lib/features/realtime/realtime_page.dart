@@ -205,15 +205,20 @@ class _RealtimePageState extends State<RealtimePage>
     final localStream = _localStream;
     if (localStream == null) return;
 
+    final connectionState = _state.connectionState;
+    final isConditionUpdate =
+        connectionState == RealtimeConnectionState.generating;
+
     // Only the newest UI operation may publish async results back to XLab.
     final operation = ++_realtimeOperationVersion;
     setState(() {
       _busy = true;
-      _isLoading = true;
+      // A change_condition keeps rendering the current remote stream. Loading
+      // is reserved for the initial connection/generation transition.
+      _isLoading = !isConditionUpdate;
       _lastError = null;
     });
     try {
-      final connectionState = _state.connectionState;
       final hasOpenConnection =
           connectionState == RealtimeConnectionState.connected ||
           connectionState == RealtimeConnectionState.generating;
@@ -609,6 +614,7 @@ class _RealtimePageState extends State<RealtimePage>
                 mode: _panelMode,
                 generating: generating,
                 busy: _busy,
+                enabled: _cameraReady,
                 promptController: _promptController,
                 referencesByCategory: _referencesByCategory,
                 selectedReference: _selectedReference,

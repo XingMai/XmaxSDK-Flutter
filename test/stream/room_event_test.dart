@@ -35,6 +35,24 @@ void main() {
     });
   });
 
+  test('change condition omits a removed reference like iOS', () {
+    final event =
+        jsonDecode(
+              RoomEvent.changeCondition(
+                userID: 'user-1',
+                taskID: 'task-1',
+                videoFormat: format,
+                context: RealtimeContext(prompt: 'animate without a reference'),
+              ),
+            )
+            as Map<String, Object?>;
+    final params = event['params'] as Map<String, Object?>;
+
+    expect(event['event'], 'change_condition');
+    expect(params['prompt'], 'animate without a reference');
+    expect(params.containsKey('ref_image_path'), isFalse);
+  });
+
   test('tracks, stop, and heartbeat events match iOS keys', () {
     expect(
       jsonDecode(
