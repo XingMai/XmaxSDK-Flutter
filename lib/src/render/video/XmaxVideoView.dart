@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:volc_engine_rtc/volc_engine_rtc.dart';
 
 import '../../foundation/media/video/VideoContentMode.dart';
@@ -30,14 +31,25 @@ final class XmaxVideoView extends StatefulWidget {
   State<XmaxVideoView> createState() => _XmaxVideoViewState();
 }
 
-final class _XmaxVideoViewState extends State<XmaxVideoView> {
+final class _XmaxVideoViewState extends State<XmaxVideoView>
+    with SingleTickerProviderStateMixin {
+  static const _samplingInterval = Duration(
+    microseconds: Duration.microsecondsPerSecond ~/ 30,
+  );
+
   late TrajectoryEffectRendering _renderer;
+  late final Ticker _samplingTicker;
   final Map<int, _ActivePointer> _activePointers = <int, _ActivePointer>{};
+  Duration _currentSamplingTime = Duration.zero;
+  Duration? _lastSampleTime;
+  Size? _samplingViewportSize;
+  void Function(InteractionFrame frame)? _samplingListener;
 
   @override
   void initState() {
     super.initState();
     _renderer = widget.trajectoryRenderer ?? DefaultTrajectoryEffectRenderer();
+    _samplingTicker = createTicker(_sampleActivePointers);
   }
 
   @override
@@ -58,6 +70,7 @@ final class _XmaxVideoViewState extends State<XmaxVideoView> {
   @override
   void dispose() {
     _resetPointers();
+    _samplingTicker.dispose();
     super.dispose();
   }
 
@@ -162,8 +175,19 @@ final class _XmaxVideoViewState extends State<XmaxVideoView> {
     );
 
     _activePointers[event.pointer] = pointer;
+    _updateSamplingContext(size, listener);
     _renderer.renderBegan(<TrajectoryPoint>[_point(pointer, size)]);
+
+    // Match iOS: submit the first touch immediately, then let the display
+    // ticker continuously sample every active pointer at 30 Hz.
     _submit(size, listener);
+    if (!_samplingTicker.isActive) {
+      _currentSamplingTime = Duration.zero;
+      _lastSampleTime = Duration.zero;
+      _samplingTicker.start();
+    } else {
+      _lastSampleTime = _currentSamplingTime;
+    }
   }
 
   void _pointerMove(
@@ -177,8 +201,8 @@ final class _XmaxVideoViewState extends State<XmaxVideoView> {
     }
 
     pointer.location = event.localPosition;
+    _updateSamplingContext(size, listener);
     _renderer.renderMoved(<TrajectoryPoint>[_point(pointer, size)]);
-    _submit(size, listener);
   }
 
   void _pointerUp(PointerEvent event) {
@@ -186,6 +210,52 @@ final class _XmaxVideoViewState extends State<XmaxVideoView> {
     if (pointer != null) {
       _renderer.renderEnded(<TrajectoryID>[pointer.id]);
     }
+
+    if (_activePointers.isEmpty) {
+      _stopSampling();
+    }
+  }
+
+  void _sampleActivePointers(Duration elapsed) {
+    _currentSamplingTime = elapsed;
+
+    if (_activePointers.isEmpty) {
+      _stopSampling();
+      return;
+    }
+
+    final lastSampleTime = _lastSampleTime;
+    if (lastSampleTime != null &&
+        elapsed - lastSampleTime < _samplingInterval) {
+      return;
+    }
+
+    final size = _samplingViewportSize;
+    final listener = _samplingListener;
+    if (size == null || listener == null) {
+      return;
+    }
+
+    _submit(size, listener);
+    _lastSampleTime = elapsed;
+  }
+
+  void _updateSamplingContext(
+    Size size,
+    void Function(InteractionFrame frame) listener,
+  ) {
+    _samplingViewportSize = size;
+    _samplingListener = listener;
+  }
+
+  void _stopSampling() {
+    if (_samplingTicker.isActive) {
+      _samplingTicker.stop();
+    }
+    _currentSamplingTime = Duration.zero;
+    _lastSampleTime = null;
+    _samplingViewportSize = null;
+    _samplingListener = null;
   }
 
   TrajectoryPoint _point(_ActivePointer pointer, Size size) => TrajectoryPoint(
@@ -212,6 +282,7 @@ final class _XmaxVideoViewState extends State<XmaxVideoView> {
 
   void _resetPointers() {
     _activePointers.clear();
+    _stopSampling();
     _renderer.reset();
   }
 }

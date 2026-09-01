@@ -30,10 +30,12 @@ final class CameraController {
   final PermissionManaging _permissionManager;
   final MediaServicing _mediaService;
   RealtimeVideoTrack? _activeTrack;
+  RealtimeCameraPreviewReadyListener? _previewReadyListener;
 
   RealtimeVideoTrack? get currentTrack => _activeTrack;
 
   void setPreviewReadyListener(RealtimeCameraPreviewReadyListener? listener) {
+    _previewReadyListener = listener;
     _rtcManager.setCameraPreviewReadyListener(listener);
   }
 
@@ -58,6 +60,11 @@ final class CameraController {
 
     try {
       await _permissionManager.ensureCameraPermission();
+
+      // RtcManager.destroy() releases its native callback references. Keep the
+      // public manager-level listener stable across close() and reinstall it
+      // whenever a new RTC camera session starts.
+      _rtcManager.setCameraPreviewReadyListener(_previewReadyListener);
       await _rtcManager.switchCamera(position: position);
       await _rtcManager.startVideoCapture(
         width: format.width,

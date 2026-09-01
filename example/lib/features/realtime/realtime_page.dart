@@ -53,6 +53,9 @@ class _RealtimePageState extends State<RealtimePage>
   bool _cameraReady = false;
   bool _busy = false;
   bool _isLoading = true;
+  bool _isSuspendedForBackground = false;
+  bool _isResumingFromBackground = false;
+  Future<void> _backgroundCleanup = Future<void>.value();
   Animation<double>? _routeAnimation;
   bool _hasScheduledInitialCameraStart = false;
   int _realtimeOperationVersion = 0;
@@ -139,7 +142,7 @@ class _RealtimePageState extends State<RealtimePage>
       options: const RealtimeConfiguration(model: RealtimeModel.x2_0),
     );
     _manager.setStateListener((state) {
-      if (!mounted) return;
+      if (!mounted || _isSuspendedForBackground) return;
       setState(() {
         _state = state;
         if (state.connectionState == RealtimeConnectionState.connected &&
@@ -149,11 +152,11 @@ class _RealtimePageState extends State<RealtimePage>
       });
     });
     _manager.setErrorListener((error) {
-      if (!mounted) return;
+      if (!mounted || _isSuspendedForBackground) return;
       setState(() => _lastError = error);
     });
     _manager.setCameraPreviewReadyListener(() {
-      if (mounted) {
+      if (mounted && !_isSuspendedForBackground) {
         setState(() {
           _cameraReady = true;
           _isLoading = false;
@@ -161,7 +164,9 @@ class _RealtimePageState extends State<RealtimePage>
       }
     });
     _manager.setPerformanceAlarmListener((alarm) {
-      if (mounted && alarm.status == RealtimePerformanceStatus.limited) {
+      if (mounted &&
+          !_isSuspendedForBackground &&
+          alarm.status == RealtimePerformanceStatus.limited) {
         setState(() {
           _lastError = const XmaxError(
             code: XmaxErrorCode.mediaError,
@@ -173,7 +178,7 @@ class _RealtimePageState extends State<RealtimePage>
   }
 
   Future<void> _startCamera() async {
-    if (_busy || _localStream != null) return;
+    if (_isSuspendedForBackground || _busy || _localStream != null) return;
 
     final operation = ++_realtimeOperationVersion;
     setState(() {
@@ -502,25 +507,76 @@ class _RealtimePageState extends State<RealtimePage>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.detached) {
-      unawaited(_suspend());
-    } else if (state == AppLifecycleState.resumed &&
-        _localStream == null &&
-        widget.localInput == null) {
-      unawaited(_startCamera());
+      unawaited(_suspendForBackground());
+    } else if (state == AppLifecycleState.resumed) {
+      unawaited(_resumeAfterBackgroundIfNeeded());
     }
   }
 
-  Future<void> _suspend() async {
-    final operation = ++_realtimeOperationVersion;
-    await _manager.close();
-    if (_isCurrentRealtimeOperation(operation)) {
+  Future<void> _suspendForBackground() async {
+    if (_isSuspendedForBackground) return;
+
+    _isSuspendedForBackground = true;
+    _isResumingFromBackground = false;
+    _realtimeOperationVersion += 1;
+    FocusManager.instance.primaryFocus?.unfocus();
+
+    // Match iOS XLab: clear the active realtime session immediately while
+    // preserving the reference catalog, prompt reference, and COS uploads.
+    if (mounted) {
       setState(() {
         _localStream = null;
         _remoteStream = null;
+        _state = const RealtimeState(
+          connectionState: RealtimeConnectionState.idle,
+        );
+        _selectedReference = null;
         _cameraReady = false;
         _busy = false;
         _isLoading = false;
+        _lastError = null;
       });
+    }
+
+    final cleanup = _closeRealtimeForBackground();
+    _backgroundCleanup = cleanup;
+    await cleanup;
+  }
+
+  Future<void> _closeRealtimeForBackground() async {
+    try {
+      await _manager.close();
+    } catch (_) {
+      // Background cleanup must not surface a stale error after the next
+      // foreground session starts.
+    }
+  }
+
+  Future<void> _resumeAfterBackgroundIfNeeded() async {
+    if (!_isSuspendedForBackground || _isResumingFromBackground) return;
+
+    _isResumingFromBackground = true;
+    if (mounted && widget.localInput == null) {
+      setState(() => _isLoading = true);
+    }
+
+    await _backgroundCleanup;
+    final isActive =
+        WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
+    if (!mounted || !_isSuspendedForBackground || !isActive) {
+      _isResumingFromBackground = false;
+      return;
+    }
+
+    _isSuspendedForBackground = false;
+    _isResumingFromBackground = false;
+
+    if (widget.localInput == null) {
+      await _startCamera();
+    } else {
+      // File input is already retained by the page and can be displayed again
+      // without reopening the camera.
+      setState(() => _isLoading = false);
     }
   }
 
@@ -593,9 +649,6 @@ class _RealtimePageState extends State<RealtimePage>
                       localTrack: _localStream?.videoTrack,
                       remoteTrack: _remoteStream?.videoTrack,
                       videoContentMode: VideoContentMode.fill,
-                      isInteractionEnabled:
-                          generating &&
-                          _panelMode == XLabRealtimePanelMode.touch,
                       trajectoryRenderer: _customRenderer,
                     ),
                     if (_localStream?.videoTrack == null && localImage == null)
