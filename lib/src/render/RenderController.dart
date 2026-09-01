@@ -39,6 +39,7 @@ final class RenderController implements RenderControlling {
     _remoteStream = stream;
     _remoteFrameReady = false;
     _cancelWaiter();
+
     final track = _remoteTrack;
     if (track != null) {
       VideoRenderRegistry.register(
@@ -53,9 +54,12 @@ final class RenderController implements RenderControlling {
     if (_remoteStream?.key != stream.key) {
       return;
     }
+
     _remoteFrameReady = true;
+
     final completer = _remoteFrameCompleter;
     _remoteFrameCompleter = null;
+
     if (completer != null && !completer.isCompleted) {
       completer.complete();
     }
@@ -69,9 +73,11 @@ final class RenderController implements RenderControlling {
         message: 'Remote video stream is unavailable',
       );
     }
+
     if (_remoteFrameReady) {
       return;
     }
+
     final completer = Completer<void>();
     _remoteFrameCompleter = completer;
     await completer.future.timeout(
@@ -88,17 +94,20 @@ final class RenderController implements RenderControlling {
     _cancelWaiter();
     _remoteFrameReady = false;
     _remoteStream = null;
+
     final target = track ?? _remoteTrack;
     if (target != null) {
       VideoRenderRegistry.unregister(target);
       TrajectoryRegistry.unregister(target);
     }
+
     _remoteTrack = null;
   }
 
   void _cancelWaiter() {
     final completer = _remoteFrameCompleter;
     _remoteFrameCompleter = null;
+
     if (completer != null && !completer.isCompleted) {
       completer.completeError(
         const XmaxError(

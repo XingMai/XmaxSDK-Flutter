@@ -38,14 +38,17 @@ final class HttpApiTransport implements ApiTransport {
   }) async {
     final request = await _client.openUrl(method.value, url).timeout(timeout);
     headers.forEach(request.headers.set);
+
     if (body != null) {
       request.add(body);
     }
+
     final response = await request.close().timeout(timeout);
     final bytes = await response.fold<List<int>>(
       <int>[],
       (buffer, chunk) => buffer..addAll(chunk),
     );
+
     return ApiTransportResponse(statusCode: response.statusCode, body: bytes);
   }
 }
@@ -84,6 +87,7 @@ final class ApiService implements ApiServicing {
     final encodedBody = body == null ? null : utf8.encode(jsonEncode(body));
     final stopwatch = Stopwatch()..start();
 
+    // Transport errors map to network errors; response errors are parsed below.
     final ApiTransportResponse response;
     try {
       response = await _transport.send(
@@ -113,6 +117,7 @@ final class ApiService implements ApiServicing {
 
     try {
       final value = _parseResponse(response, decode);
+
       XmaxLogger.debug(
         '${method.value} $path ${response.statusCode} '
         '${stopwatch.elapsedMilliseconds}ms',
@@ -137,6 +142,7 @@ final class ApiService implements ApiServicing {
         message: 'API key cannot be empty',
       );
     }
+
     if (_baseURL.scheme.toLowerCase() != 'https' ||
         _baseURL.host.isEmpty ||
         _timeout <= Duration.zero) {
@@ -157,12 +163,14 @@ final class ApiService implements ApiServicing {
         message: 'API request path is invalid',
       );
     }
+
     final basePath = _baseURL.path.endsWith('/')
         ? _baseURL.path.substring(0, _baseURL.path.length - 1)
         : _baseURL.path;
     final relativePath = normalizedPath.startsWith('/')
         ? normalizedPath
         : '/$normalizedPath';
+
     return _baseURL.replace(path: '$basePath$relativePath');
   }
 
@@ -180,6 +188,7 @@ final class ApiService implements ApiServicing {
         httpStatus: response.statusCode,
       );
     }
+
     if (json is! Map<String, dynamic>) {
       throw XmaxError(
         code: XmaxErrorCode.apiError,
@@ -211,6 +220,7 @@ final class ApiService implements ApiServicing {
         httpStatus: response.statusCode,
       );
     }
+
     try {
       return decode(json['data']);
     } catch (_) {

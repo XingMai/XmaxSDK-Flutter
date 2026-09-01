@@ -94,12 +94,14 @@ final class StreamController implements StreamControlling {
   @override
   Future<void> setRemoteAudioVolume(double volume) async {
     final rtcVolume = (volume * 100).round();
+
     for (final streamID in _remoteAudioSubscriptions) {
       await _rtcManager.setRemoteAudioVolume(
         volume: rtcVolume,
         streamID: streamID,
       );
     }
+
     _remoteAudioVolume = rtcVolume;
   }
 
@@ -112,16 +114,20 @@ final class StreamController implements StreamControlling {
       connection: connection,
       ensureActive: ensureActive,
     );
+
     ensureActive();
     _roomID = connection.roomID.trim();
     _botName = connection.botName?.trim() ?? '';
+
     await _rtcManager.publishLocalVideo(publish: true);
     _localVideoPublished = true;
   }
 
   @override
   Future<void> disconnect() async {
+    // Stop the generation handshake before changing RTC subscriptions.
     await _clearGeneration(notifyRemote: true);
+
     for (final streamID in _remoteAudioSubscriptions.toList()) {
       await _safe(
         () => _rtcManager.subscribeRemoteAudio(
@@ -130,6 +136,7 @@ final class StreamController implements StreamControlling {
         ),
       );
     }
+
     for (final streamID in _remoteVideoSubscriptions.toList()) {
       await _safe(
         () => _rtcManager.subscribeRemoteVideo(
@@ -138,14 +145,17 @@ final class StreamController implements StreamControlling {
         ),
       );
     }
+
     if (_localVideoPublished) {
       await _safe(() => _rtcManager.publishLocalVideo(publish: false));
     }
+
     _remoteAudioSubscriptions.clear();
     _remoteVideoSubscriptions.clear();
     _localVideoPublished = false;
     _roomID = '';
     _botName = '';
+
     await _roomController.leave();
   }
 
@@ -161,18 +171,22 @@ final class StreamController implements StreamControlling {
         message: 'Realtime generation task ID cannot be empty',
       );
     }
+
     if (_roomID.isEmpty) {
       throw const XmaxError(
         code: XmaxErrorCode.rtcError,
         message: 'RTC room is not configured',
       );
     }
+
     if (_generationTaskID != null) {
       throw const XmaxError(
         code: XmaxErrorCode.rtcError,
         message: 'Realtime generation is already active',
       );
     }
+
+    // Generation is acknowledged by an SEI message carrying this task ID.
     final completer = Completer<void>();
     _generationTaskID = taskID;
     _generationCompleter = completer;
@@ -184,6 +198,7 @@ final class StreamController implements StreamControlling {
         ),
       );
     });
+
     try {
       await _roomController.startGeneration(
         taskID: taskID,
@@ -192,6 +207,7 @@ final class StreamController implements StreamControlling {
       );
       await completer.future;
     } catch (error) {
+      // Cancel both the local waiter and any remote task already requested.
       await _clearGeneration(notifyRemote: true);
       rethrow;
     }
@@ -206,6 +222,7 @@ final class StreamController implements StreamControlling {
         message: 'Remote generation audio stream is unavailable',
       );
     }
+
     if (_remoteAudioSubscriptions.add(stream.streamID)) {
       await _rtcManager.setRemoteAudioVolume(
         volume: _remoteAudioVolume,
@@ -236,6 +253,7 @@ final class StreamController implements StreamControlling {
         (taskID.isNotEmpty && taskID != stoppedTaskID)) {
       return;
     }
+
     await _clearGeneration(notifyRemote: true);
     await _roomController.stopGeneration(taskID: stoppedTaskID);
   }
@@ -250,6 +268,7 @@ final class StreamController implements StreamControlling {
     if (!_isExpectedRemote(stream)) {
       return;
     }
+
     if (published) {
       if (_remoteVideoSubscriptions.add(stream.streamID)) {
         unawaited(_subscribeRemoteVideo(stream));
@@ -282,10 +301,13 @@ final class StreamController implements StreamControlling {
     if (taskID == null || completer == null || completer.isCompleted) {
       return;
     }
+
     final message = utf8.decode(bytes, allowMalformed: true).trim();
     if (message != taskID || !_isExpectedRemote(stream)) {
       return;
     }
+
+    // A matching SEI binds the RTC stream to the pending generation task.
     _activeRemoteStream = stream;
     _remoteStreamListener?.call(stream);
     _generationTimer?.cancel();
@@ -315,6 +337,7 @@ final class StreamController implements StreamControlling {
     _generationTimer?.cancel();
     _generationTimer = null;
     _generationCompleter = null;
+
     if (completer != null && !completer.isCompleted) {
       completer.completeError(error);
     }
@@ -327,8 +350,10 @@ final class StreamController implements StreamControlling {
         message: 'Realtime generation start cancelled',
       ),
     );
+
     _generationTaskID = null;
     _activeRemoteStream = null;
+
     for (final streamID in _remoteAudioSubscriptions.toList()) {
       await _safe(
         () => _rtcManager.subscribeRemoteAudio(
@@ -337,7 +362,9 @@ final class StreamController implements StreamControlling {
         ),
       );
     }
+
     _remoteAudioSubscriptions.clear();
+
     if (notifyRemote) {
       _remoteStreamListener?.call(null);
     }

@@ -30,11 +30,15 @@ final class StorageManager implements StorageManaging {
       contentType: contentType,
       configuration: configuration,
     );
+
     final completer = Completer<StoredFile>();
+
     try {
       final transferManager = await _transferManager(configuration);
       final credential = configuration.credential;
       final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+
+      // COS expects a short-lived session credential for every transfer.
       final sessionCredentials = SessionQCloudCredentials(
         secretId: credential.accessKeyID,
         secretKey: credential.secretAccessKey,
@@ -42,6 +46,8 @@ final class StorageManager implements StorageManaging {
         startTime: now - 60,
         expiredTime: now + 25 * 60,
       );
+
+      // Bridge the plugin's callback API into the SDK's Future-based API.
       final resultListener = ResultListener(
         (headers, result) {
           if (completer.isCompleted) {
@@ -81,6 +87,7 @@ final class StorageManager implements StorageManaging {
           }
         },
       );
+
       switch (source) {
         case StorageDataUploadSource(:final data):
           await transferManager.upload(
@@ -105,6 +112,7 @@ final class StorageManager implements StorageManaging {
             progressCallBack: progress,
           );
       }
+
       return await completer.future;
     } on XmaxError {
       rethrow;
@@ -136,9 +144,11 @@ final class StorageManager implements StorageManaging {
     }
 
     IOSink? sink;
+
     try {
       final request = await _httpClient.getUrl(remoteURL);
       final response = await request.close();
+
       if (response.statusCode < 200 || response.statusCode >= 300) {
         throw XmaxError(
           code: XmaxErrorCode.downloadError,
@@ -146,10 +156,13 @@ final class StorageManager implements StorageManaging {
           httpStatus: response.statusCode,
         );
       }
+
       final target = File(destinationURL.toFilePath());
       sink = target.openWrite();
+
       var completed = 0;
       final total = response.contentLength;
+
       await for (final chunk in response) {
         sink.add(chunk);
         completed += chunk.length;
@@ -157,9 +170,11 @@ final class StorageManager implements StorageManaging {
           progress?.call(completed, total);
         }
       }
+
       await sink.flush();
       await sink.close();
       sink = null;
+
       progress?.call(completed, completed);
       return DownloadedFile(fileURL: destinationURL, byteCount: completed);
     } on XmaxError {
@@ -183,6 +198,7 @@ final class StorageManager implements StorageManaging {
     if (Cos().hasTransferManger(key)) {
       return Cos().getTransferManger(key);
     }
+
     final endpoint = _normalizedEndpoint(configuration.endpoint);
     return Cos().registerTransferManger(
       key,
@@ -204,30 +220,35 @@ final class StorageManager implements StorageManaging {
   }) {
     final identifier = RegExp(r'^[A-Za-z0-9.-]+$');
     final credential = configuration.credential;
+
     if (!identifier.hasMatch(configuration.bucket.trim())) {
       throw const XmaxError(
         code: XmaxErrorCode.uploadError,
         message: 'Storage bucket is invalid',
       );
     }
+
     if (!identifier.hasMatch(configuration.region.trim())) {
       throw const XmaxError(
         code: XmaxErrorCode.uploadError,
         message: 'Storage region is invalid',
       );
     }
+
     if (objectKey.trim().isEmpty) {
       throw const XmaxError(
         code: XmaxErrorCode.uploadError,
         message: 'Storage object key is invalid',
       );
     }
+
     if (contentType.trim().isEmpty) {
       throw const XmaxError(
         code: XmaxErrorCode.uploadError,
         message: 'Storage content type cannot be empty',
       );
     }
+
     if (credential.accessKeyID.trim().isEmpty ||
         credential.secretAccessKey.trim().isEmpty ||
         credential.sessionToken.trim().isEmpty) {
@@ -236,6 +257,7 @@ final class StorageManager implements StorageManaging {
         message: 'Storage temporary credential is incomplete',
       );
     }
+
     if (source case StorageFileUploadSource(:final fileURL)) {
       if (!fileURL.isScheme('file') ||
           !File(fileURL.toFilePath()).existsSync()) {
@@ -253,16 +275,19 @@ final class StorageManager implements StorageManaging {
     required String objectKey,
   }) {
     final location = candidate?.trim() ?? '';
+
     if (location.startsWith('//')) {
       final url = Uri.tryParse('https:$location');
       if (url != null) {
         return url;
       }
     }
+
     final candidateURL = Uri.tryParse(location);
     if (candidateURL != null && _isHTTPURL(candidateURL)) {
       return candidateURL;
     }
+
     final configuredEndpoint = _normalizedEndpoint(configuration.endpoint);
     final endpoint =
         configuredEndpoint ??
@@ -270,6 +295,7 @@ final class StorageManager implements StorageManaging {
           'https://${configuration.bucket}.cos.'
           '${configuration.region}.myqcloud.com',
         );
+
     final segments = <String>[
       ...endpoint.pathSegments.where((segment) => segment.isNotEmpty),
       ...objectKey.split('/'),
@@ -282,9 +308,11 @@ final class StorageManager implements StorageManaging {
     if (endpoint.isEmpty) {
       return null;
     }
+
     final uri = Uri.tryParse(
       endpoint.contains('://') ? endpoint : 'https://$endpoint',
     );
+
     if (uri == null || !_isHTTPURL(uri)) {
       throw const XmaxError(
         code: XmaxErrorCode.uploadError,

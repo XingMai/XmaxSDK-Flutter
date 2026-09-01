@@ -43,8 +43,10 @@ final class RtcManager implements RtcManaging {
     if (_lease != null) {
       return;
     }
+
     final lease = await _engineManager.acquire();
     _lease = lease;
+
     await _check(
       lease.engine.setRTCEngineEventHandler(_makeEngineEventHandler()),
       'setRTCEngineEventHandler',
@@ -54,10 +56,12 @@ final class RtcManager implements RtcManaging {
   @override
   Future<void> destroy() async {
     await leaveRoom();
+
     final lease = _lease;
     _lease = null;
     _cameraPreviewReadyListener = null;
     _remoteStreamIDs.clear();
+
     if (lease != null) {
       await _engineManager.release(lease);
     }
@@ -94,6 +98,7 @@ final class RtcManager implements RtcManaging {
     required int frameRate,
   }) async {
     _validateVideoDimensions(width, height, frameRate);
+
     await _check(
       _engine.setVideoCaptureConfig(
         VideoCaptureConfig(
@@ -105,6 +110,7 @@ final class RtcManager implements RtcManaging {
       ),
       'setVideoCaptureConfig',
     );
+
     await _check(_engine.startVideoCapture(), 'startVideoCapture');
   }
 
@@ -137,6 +143,8 @@ final class RtcManager implements RtcManaging {
   Future<void> joinRoom({required RoomJoinConfiguration configuration}) async {
     _validateJoinConfiguration(configuration);
     await leaveRoom();
+
+    // Keep a single room instance so stale SDK callbacks can be ignored.
     final room = await _engine.createRTCRoom(configuration.roomID);
     if (room == null) {
       throw const XmaxError(
@@ -144,8 +152,10 @@ final class RtcManager implements RtcManaging {
         message: 'Failed to create RTC room',
       );
     }
+
     _room = room;
     _roomID = configuration.roomID;
+
     final completer = Completer<void>();
     await _check(
       room.setRTCRoomEventHandler(
@@ -153,6 +163,7 @@ final class RtcManager implements RtcManaging {
       ),
       'setRTCRoomEventHandler',
     );
+
     await _check(
       room.joinRoom(
         token: configuration.token,
@@ -169,7 +180,9 @@ final class RtcManager implements RtcManaging {
       ),
       'joinRoom',
     );
+
     try {
+      // VolcEngine reports join completion through the room event handler.
       await completer.future.timeout(
         joinTimeout,
         onTimeout: () => throw const XmaxError(
@@ -186,12 +199,16 @@ final class RtcManager implements RtcManaging {
   @override
   Future<void> leaveRoom() async {
     final room = _room;
+
+    // Clear state before awaiting the SDK to make leave idempotent/reentrant.
     _room = null;
     _roomID = '';
     _remoteStreamIDs.clear();
+
     if (room == null) {
       return;
     }
+
     try {
       await room.leaveRoom();
     } finally {
@@ -303,6 +320,8 @@ final class RtcManager implements RtcManaging {
     },
     onPerformanceAlarms: (_, _, _, reason, data) {
       final reasonName = reason.name.toLowerCase();
+
+      // Only fallback/resume alarms represent a quality state transition.
       final bool? limited = reasonName.contains('resumed')
           ? false
           : reasonName.contains('fallback')
@@ -311,6 +330,7 @@ final class RtcManager implements RtcManaging {
       if (limited == null) {
         return;
       }
+
       final validSuggestion =
           data.width > 0 && data.height > 0 && data.frameRate > 0;
       _eventListener?.onPerformanceAlarm?.call(
@@ -340,6 +360,7 @@ final class RtcManager implements RtcManaging {
           joinCompleter.isCompleted) {
         return;
       }
+
       if (state == 0) {
         joinCompleter.complete();
       } else {
@@ -359,6 +380,7 @@ final class RtcManager implements RtcManaging {
       );
     },
     onNetworkQuality: (local, remote) {
+      // Report the worst remote downlink when the SDK supplies multiple users.
       var downlink = RealtimeNetworkQualityLevel.unknown;
       for (final item in remote) {
         final level = _qualityLevel(item.rxQuality);
@@ -366,6 +388,7 @@ final class RtcManager implements RtcManaging {
           downlink = level;
         }
       }
+
       _eventListener?.onNetworkQuality?.call(
         RealtimeNetworkQuality(
           uplink: _qualityLevel(local.txQuality),
@@ -383,21 +406,27 @@ final class RtcManager implements RtcManaging {
 
   static RealtimeNetworkQualityLevel _qualityLevel(NetworkQuality quality) {
     final name = quality.name.toLowerCase();
+
     if (name.contains('very_bad') || name.contains('verybad')) {
       return RealtimeNetworkQualityLevel.veryBad;
     }
+
     if (name.contains('excellent')) {
       return RealtimeNetworkQualityLevel.excellent;
     }
+
     if (name.contains('good')) {
       return RealtimeNetworkQualityLevel.good;
     }
+
     if (name.contains('poor')) {
       return RealtimeNetworkQualityLevel.poor;
     }
+
     if (name.contains('bad')) {
       return RealtimeNetworkQualityLevel.bad;
     }
+
     if (name.contains('down')) {
       return RealtimeNetworkQualityLevel.down;
     }
@@ -407,6 +436,7 @@ final class RtcManager implements RtcManaging {
   static Future<void> _check(Future<int?> result, String operation) async {
     try {
       final status = await result;
+
       if (status != null && status < 0) {
         throw XmaxError(
           code: XmaxErrorCode.rtcError,

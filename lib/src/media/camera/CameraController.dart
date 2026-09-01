@@ -47,12 +47,14 @@ final class CameraController {
             'Stop the current local camera stream before creating another one',
       );
     }
+
     final format = _resolveVideoFormat(videoFormat);
     final track = createRealtimeVideoTrack(
       id: localVideoTrackID,
       videoFormat: format,
       position: position,
     );
+
     try {
       await _permissionManager.ensureCameraPermission();
       await _rtcManager.switchCamera(position: position);
@@ -61,10 +63,13 @@ final class CameraController {
         height: format.height,
         frameRate: format.fps,
       );
+
+      // Register rendering only after capture has started successfully.
       VideoRenderRegistry.register(track, const LocalVideoRenderBinding());
       _activeTrack = track;
       return createRealtimeMediaStream(id: localStreamID, videoTrack: track);
     } catch (error) {
+      // Roll back both registry and capture when startup fails midway.
       VideoRenderRegistry.unregister(track);
       try {
         await _rtcManager.stopVideoCapture();
@@ -76,9 +81,11 @@ final class CameraController {
   Future<void> stopLocalCameraStream() async {
     final track = _activeTrack;
     _activeTrack = null;
+
     if (track != null) {
       VideoRenderRegistry.unregister(track);
     }
+
     await _rtcManager.stopVideoCapture();
   }
 
@@ -91,11 +98,14 @@ final class CameraController {
         message: 'Local camera preview is not started',
       );
     }
+
     final next = position == CameraPosition.front
         ? CameraPosition.back
         : CameraPosition.front;
+
     await _rtcManager.switchCamera(position: next);
     updateRealtimeVideoTrack(track: track, position: next);
+
     return createRealtimeMediaStream(id: localStreamID, videoTrack: track);
   }
 

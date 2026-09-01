@@ -48,9 +48,12 @@ final class XmaxRealtimeConnectionManager {
   }) async {
     RealtimeSession? session;
     var activated = false;
+
     try {
+      // The cloud session must exist before RTC can join its assigned room.
       session = await _sessionService.createSession(model: model);
       _ensureCurrent(isCurrent);
+
       final connection = session.connection;
       if (connection == null) {
         throw const XmaxError(
@@ -58,15 +61,19 @@ final class XmaxRealtimeConnectionManager {
           message: 'Session does not contain complete RTC join information',
         );
       }
+
       await _streamController.connect(
         connection: connection,
         ensureActive: () => _ensureCurrent(isCurrent),
       );
       _ensureCurrent(isCurrent);
+
+      // Heartbeat starts only after RTC is connected successfully.
       _sessionService.startHeartbeat(
         sessionID: session.id,
         onFailure: onHeartbeatFailure,
       );
+
       final track = createRealtimeVideoTrack(
         id: connection.botName ?? 'video-remote',
         videoFormat: videoFormat,
@@ -75,20 +82,25 @@ final class XmaxRealtimeConnectionManager {
         track,
         interactionListener: _interactionController.submitInteraction,
       );
+
       _activeSession = session;
       _activeRemoteTrack = track;
       activated = true;
+
       _ensureCurrent(isCurrent);
       return createRealtimeMediaStream(id: 'stream-remote', videoTrack: track);
     } catch (error) {
+      // Roll back locally activated RTC/render state before closing the API session.
       if (isCurrent() || activated) {
         await _rollbackConnection();
       }
+
       if (session != null) {
         try {
           await _sessionService.closeSession(sessionID: session.id);
         } catch (_) {}
       }
+
       if (!isCurrent()) {
         throw const XmaxError(
           code: XmaxErrorCode.cancelled,
@@ -102,21 +114,28 @@ final class XmaxRealtimeConnectionManager {
   Future<String?> disconnect() async {
     final session = _activeSession;
     final track = _activeRemoteTrack;
+
+    // Clear ownership first so reentrant callbacks cannot reuse stale state.
     _activeSession = null;
     _activeRemoteTrack = null;
+
     _sessionService.stopHeartbeat();
     _renderController.resetRemoteTrack(track);
     await _streamController.disconnect();
+
     if (session != null) {
       await _sessionService.closeSession(sessionID: session.id);
     }
+
     return session?.id;
   }
 
   Future<void> _rollbackConnection() async {
     final track = _activeRemoteTrack;
+
     _activeSession = null;
     _activeRemoteTrack = null;
+
     _sessionService.stopHeartbeat();
     _renderController.resetRemoteTrack(track);
     await _streamController.disconnect();

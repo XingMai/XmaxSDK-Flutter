@@ -47,6 +47,7 @@ final class _XmaxVideoViewState extends State<XmaxVideoView> {
       _renderer =
           widget.trajectoryRenderer ?? DefaultTrajectoryEffectRenderer();
     }
+
     if (oldWidget.track != widget.track ||
         oldWidget.isInteractionEnabled != widget.isInteractionEnabled) {
       _resetPointers();
@@ -65,6 +66,7 @@ final class _XmaxVideoViewState extends State<XmaxVideoView> {
     if (track == null) {
       return const ColoredBox(color: Colors.black);
     }
+
     final handle = VideoRenderRegistry.handleFor(track);
     final video = handle == null
         ? const ColoredBox(color: Colors.black)
@@ -72,7 +74,9 @@ final class _XmaxVideoViewState extends State<XmaxVideoView> {
             valueListenable: handle,
             builder: (context, binding, _) => _buildVideo(binding),
           );
+
     final interaction = TrajectoryRegistry.bindingFor(track);
+
     return ColoredBox(
       color: Colors.black,
       child: Stack(
@@ -107,7 +111,9 @@ final class _XmaxVideoViewState extends State<XmaxVideoView> {
     if (binding == null) {
       return const ColoredBox(color: Colors.black);
     }
+
     final RTCViewContext viewContext;
+
     if (binding is LocalVideoRenderBinding) {
       viewContext = RTCViewContext.localContext(userId: 'local');
     } else if (binding is RemoteVideoRenderBinding) {
@@ -119,6 +125,7 @@ final class _XmaxVideoViewState extends State<XmaxVideoView> {
     } else {
       return const ColoredBox(color: Colors.black);
     }
+
     return RTCSurfaceView(
       key: ValueKey<String>(
         '${viewContext.canvasType}:${viewContext.roomId}:'
@@ -144,6 +151,7 @@ final class _XmaxVideoViewState extends State<XmaxVideoView> {
       id: createTrajectoryID(event.pointer),
       location: event.localPosition,
     );
+
     _activePointers[event.pointer] = pointer;
     _renderer.renderBegan(<TrajectoryPoint>[_point(pointer, size)]);
     _submit(size, listener);
@@ -158,6 +166,7 @@ final class _XmaxVideoViewState extends State<XmaxVideoView> {
     if (pointer == null) {
       return;
     }
+
     pointer.location = event.localPosition;
     _renderer.renderMoved(<TrajectoryPoint>[_point(pointer, size)]);
     _submit(size, listener);

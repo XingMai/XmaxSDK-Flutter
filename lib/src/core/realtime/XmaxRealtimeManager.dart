@@ -31,6 +31,7 @@ final class XmaxRealtimeManager implements XmaxRealtimeManaging {
     final errorHandler = RealtimeErrorHandler();
     final rtcManager = RtcManager();
     final renderController = RenderController();
+
     late final StreamController streamController;
     streamController = StreamController(
       rtcManager: rtcManager,
@@ -38,21 +39,25 @@ final class XmaxRealtimeManager implements XmaxRealtimeManaging {
       remoteStreamListener: renderController.setRemoteStream,
       remoteFrameReadyListener: renderController.notifyRemoteFrameReady,
     );
+
     final mediaController = MediaController(
       rtcManager: rtcManager,
       interactionListener: (taskID, points) =>
           streamController.sendTracks(taskID: taskID, points: points),
     );
+
     final connectionManager = XmaxRealtimeConnectionManager(
       sessionService: RealtimeSessionService(apiService: apiService),
       interactionController: mediaController,
       renderController: renderController,
       streamController: streamController,
     );
+
     final generationManager = XmaxRealtimeGenerationManager(
       interactionController: mediaController,
       streamController: streamController,
     );
+
     return XmaxRealtimeManager.internal(
       options: options,
       mediaController: mediaController,
@@ -167,6 +172,7 @@ final class XmaxRealtimeManager implements XmaxRealtimeManaging {
         ),
       );
     }
+
     try {
       return await _mediaController.createLocalCameraStream(
         videoFormat: videoFormat,
@@ -190,6 +196,7 @@ final class XmaxRealtimeManager implements XmaxRealtimeManaging {
         ),
       );
     }
+
     try {
       await _mediaController.stopLocalCameraStream();
     } catch (error) {
@@ -209,8 +216,10 @@ final class XmaxRealtimeManager implements XmaxRealtimeManaging {
         ),
       );
     }
+
     final wasGenerating =
         _state.connectionState == RealtimeConnectionState.generating;
+
     if (!wasGenerating && _streamController.hasGenerationTask) {
       throw _report(
         const XmaxError(
@@ -220,11 +229,15 @@ final class XmaxRealtimeManager implements XmaxRealtimeManaging {
         ),
       );
     }
+
     if (wasGenerating) {
       await stopGeneration();
     }
+
     try {
       final stream = await _mediaController.switchCamera();
+
+      // Restart generation only after the new camera has had time to publish.
       if (wasGenerating) {
         await Future<void>.delayed(const Duration(milliseconds: 500));
         await startGeneration();
@@ -249,6 +262,7 @@ final class XmaxRealtimeManager implements XmaxRealtimeManaging {
         ),
       );
     }
+
     final videoFormat = localStream.videoTrack?.videoFormat;
     if (videoFormat == null || !_mediaController.owns(localStream)) {
       throw _report(
@@ -259,19 +273,25 @@ final class XmaxRealtimeManager implements XmaxRealtimeManaging {
         ),
       );
     }
+
+    // A new operation version invalidates every callback from an older connect.
     await _generationManager.reset();
     final version = ++_operationVersion;
+
     _emit(
       const RealtimeState(connectionState: RealtimeConnectionState.connecting),
     );
+
     try {
       await _streamController.setVideoEncoderConfig(videoFormat);
+
       final remoteStream = await _connectionManager.connect(
         model: options.model,
         videoFormat: videoFormat,
         isCurrent: () => version == _operationVersion,
         onHeartbeatFailure: _handleHeartbeatFailure,
       );
+
       _ensureCurrent(version);
       final sessionID = _connectionManager.currentSessionID;
       if (sessionID.isEmpty) {
@@ -280,20 +300,24 @@ final class XmaxRealtimeManager implements XmaxRealtimeManaging {
           message: 'Realtime connection was cancelled',
         );
       }
+
       _emit(
         RealtimeState(
           connectionState: RealtimeConnectionState.connected,
           sessionID: sessionID,
         ),
       );
+
       return remoteStream;
     } catch (error) {
+      // A newer disconnect/close owns the state when the version has changed.
       if (version != _operationVersion) {
         throw const XmaxError(
           code: XmaxErrorCode.cancelled,
           message: 'Realtime connection was cancelled',
         );
       }
+
       final xmaxError = _report(error);
       _emit(
         const RealtimeState(connectionState: RealtimeConnectionState.error),
@@ -308,10 +332,12 @@ final class XmaxRealtimeManager implements XmaxRealtimeManaging {
     if (active != null) {
       return active;
     }
+
     if (_state.connectionState == RealtimeConnectionState.idle ||
         _state.connectionState == RealtimeConnectionState.disconnected) {
       return Future<void>.value();
     }
+
     final future = _performDisconnect(
       finalState: RealtimeConnectionState.disconnected,
     );
@@ -322,24 +348,30 @@ final class XmaxRealtimeManager implements XmaxRealtimeManaging {
   Future<void> _performDisconnect({
     required RealtimeConnectionState finalState,
   }) async {
+    // Invalidate pending connect/generation callbacks before cleanup starts.
     _operationVersion += 1;
     final taskID = _state.taskID ?? '';
+
     _emit(
       const RealtimeState(
         connectionState: RealtimeConnectionState.disconnecting,
       ),
     );
+
+    // Cleanup is best-effort: one failing layer must not retain the others.
     try {
       await _generationManager.reset(taskID: taskID);
     } catch (error) {
       _report(error);
     }
+
     String? sessionID;
     try {
       sessionID = await _connectionManager.disconnect();
     } catch (error) {
       _report(error);
     }
+
     _emit(RealtimeState(connectionState: finalState, sessionID: sessionID));
   }
 
@@ -349,6 +381,7 @@ final class XmaxRealtimeManager implements XmaxRealtimeManaging {
     if (active != null) {
       return active;
     }
+
     final future = _performClose();
     _closeFuture = future;
     return future.whenComplete(() => _closeFuture = null);
@@ -357,6 +390,7 @@ final class XmaxRealtimeManager implements XmaxRealtimeManaging {
   Future<void> _performClose() async {
     _operationVersion += 1;
     await disconnect();
+
     try {
       await _mediaController.stopLocalStream();
     } catch (error) {
@@ -378,6 +412,7 @@ final class XmaxRealtimeManager implements XmaxRealtimeManaging {
         ),
       );
     }
+
     RealtimeMediaStream? remoteStream;
     if (localStream != null) {
       if (_state.connectionState == RealtimeConnectionState.connected ||
@@ -387,6 +422,7 @@ final class XmaxRealtimeManager implements XmaxRealtimeManaging {
         remoteStream = await connect(localStream: localStream);
       }
     }
+
     await _performStartGeneration(context);
     return remoteStream;
   }
@@ -405,6 +441,7 @@ final class XmaxRealtimeManager implements XmaxRealtimeManaging {
         ),
       );
     }
+
     if (_state.connectionState == RealtimeConnectionState.generating &&
         _state.taskID != null) {
       try {
@@ -418,16 +455,21 @@ final class XmaxRealtimeManager implements XmaxRealtimeManaging {
         throw _report(error);
       }
     }
+
     final version = _operationVersion;
     String? taskID;
+
     try {
       taskID = await _generationManager.start(
         videoFormat: videoFormat,
         context: context,
         ensureCurrent: () => _ensureCurrent(version),
       );
+
+      // Video becomes usable only after both rendering and audio are ready.
       await _renderController.waitUntilRemoteFrameReady();
       await _streamController.activateRemoteAudio();
+
       _ensureCurrent(version);
       if (_connectionManager.currentSessionID != sessionID) {
         throw const XmaxError(
@@ -435,6 +477,7 @@ final class XmaxRealtimeManager implements XmaxRealtimeManaging {
           message: 'Realtime connection was cancelled',
         );
       }
+
       _emit(
         RealtimeState(
           connectionState: RealtimeConnectionState.generating,
@@ -443,6 +486,7 @@ final class XmaxRealtimeManager implements XmaxRealtimeManaging {
         ),
       );
     } catch (error) {
+      // A task created before a later failure must be stopped explicitly.
       if (taskID != null) {
         await _generationManager.stop(taskID: taskID);
       }
@@ -458,13 +502,16 @@ final class XmaxRealtimeManager implements XmaxRealtimeManaging {
             _state.connectionState != RealtimeConnectionState.generating)) {
       return;
     }
+
     final wasGenerating =
         _state.connectionState == RealtimeConnectionState.generating;
+
     try {
       await _generationManager.stop(taskID: _state.taskID ?? '');
     } catch (error) {
       _report(error);
     }
+
     if (wasGenerating) {
       _emit(
         RealtimeState(
@@ -479,6 +526,7 @@ final class XmaxRealtimeManager implements XmaxRealtimeManaging {
     if (_connectionManager.currentSessionID != sessionID) {
       return;
     }
+
     _report(error);
     await _performDisconnect(finalState: RealtimeConnectionState.error);
   }

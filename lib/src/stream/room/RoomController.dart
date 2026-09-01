@@ -25,14 +25,17 @@ final class RoomController implements RoomControlling {
     required void Function() ensureActive,
   }) async {
     ensureActive();
+
     if (_userID != null || _joining) {
       throw const XmaxError(
         code: XmaxErrorCode.invalidConfiguration,
         message: 'Leave the current RTC room before joining another one',
       );
     }
+
     _joining = true;
     _heartbeat.stop();
+
     try {
       await _rtcManager.joinRoom(
         configuration: RoomJoinConfiguration(
@@ -41,7 +44,9 @@ final class RoomController implements RoomControlling {
           token: connection.token,
         ),
       );
+
       ensureActive();
+
       _userID = connection.userID;
       _heartbeat.start(userID: connection.userID);
     } catch (error) {
@@ -54,9 +59,11 @@ final class RoomController implements RoomControlling {
 
   @override
   Future<void> leave() async {
+    // Clear local ownership before awaiting the native room shutdown.
     _userID = null;
     _joining = false;
     _heartbeat.stop();
+
     await _rtcManager.leaveRoom();
   }
 
@@ -94,6 +101,7 @@ final class RoomController implements RoomControlling {
     if (userID == null || taskID.isEmpty) {
       return;
     }
+
     await _rtcManager.sendRoomMessage(
       RoomEvent.stop(userID: userID, taskID: taskID),
     );
@@ -107,6 +115,7 @@ final class RoomController implements RoomControlling {
     if (taskID.isEmpty || points.isEmpty) {
       return;
     }
+
     await _rtcManager.sendRoomMessage(
       RoomEvent.tracks(
         userID: _requireUserID(),
@@ -124,6 +133,7 @@ final class RoomController implements RoomControlling {
         message: 'RTC room is not joined',
       );
     }
+
     return userID;
   }
 }

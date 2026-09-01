@@ -45,6 +45,7 @@ final class InteractionController implements InteractionControlling {
     if (taskID == null || format == null || frame.points.isEmpty) {
       return;
     }
+
     final videoSize = Size(format.width.toDouble(), format.height.toDouble());
     final points = frame.points
         .map(
@@ -57,10 +58,14 @@ final class InteractionController implements InteractionControlling {
         )
         .whereType<RealtimePoint>()
         .toList(growable: false);
+
     if (points.isEmpty) {
       return;
     }
+
+    // Keep only the latest unsent frame to avoid an unbounded touch backlog.
     _pendingPoints = points;
+
     if (!_draining) {
       unawaited(_drain(taskID));
     }
@@ -72,12 +77,14 @@ final class InteractionController implements InteractionControlling {
       while (_taskID == taskID && _pendingPoints != null) {
         final points = _pendingPoints!;
         _pendingPoints = null;
+
         try {
           await _listener(taskID, points);
         } catch (_) {}
       }
     } finally {
       _draining = false;
+
       if (_taskID != null && _pendingPoints != null) {
         unawaited(_drain(_taskID!));
       }

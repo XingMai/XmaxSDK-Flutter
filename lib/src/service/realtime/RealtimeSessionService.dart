@@ -35,6 +35,8 @@ final class RealtimeSessionService implements RealtimeSessionServicing {
     required RealtimeSessionHeartbeatFailureHandler onFailure,
   }) {
     stopHeartbeat();
+
+    // The version prevents a cancelled timer/request from rescheduling itself.
     final version = ++_heartbeatVersion;
     _heartbeatTimer = Timer(_heartbeatInterval, () {
       unawaited(_heartbeat(sessionID, version, onFailure));
@@ -61,14 +63,17 @@ final class RealtimeSessionService implements RealtimeSessionServicing {
     if (version != _heartbeatVersion) {
       return;
     }
+
     try {
       final payload = await _apiService.put<Map<String, dynamic>>(
         '/session/$sessionID/heartbeat',
         _map,
       );
+
       if (version != _heartbeatVersion) {
         return;
       }
+
       final session = _makeSession(payload, requiresConnection: false);
       if (session.status != null && session.status != 'ACTIVE') {
         throw XmaxError(
@@ -78,6 +83,7 @@ final class RealtimeSessionService implements RealtimeSessionServicing {
               'Session is no longer active: ${session.status}',
         );
       }
+
       _heartbeatTimer = Timer(_heartbeatInterval, () {
         unawaited(_heartbeat(sessionID, version, onFailure));
       });
@@ -85,6 +91,7 @@ final class RealtimeSessionService implements RealtimeSessionServicing {
       if (version != _heartbeatVersion) {
         return;
       }
+
       _heartbeatVersion += 1;
       _heartbeatTimer = null;
       await onFailure(sessionID, error);
@@ -102,14 +109,17 @@ final class RealtimeSessionService implements RealtimeSessionServicing {
         message: 'Invalid session response',
       );
     }
+
     final userID = _nonEmpty(payload['userUid']);
     final connection = _makeConnection(payload['modelExtra'], userID);
+
     if (requiresConnection && connection == null) {
       throw const XmaxError(
         code: XmaxErrorCode.sessionError,
         message: 'Session does not contain complete RTC join information',
       );
     }
+
     return RealtimeSession(
       id: sessionID,
       userID: userID,
@@ -131,15 +141,19 @@ final class RealtimeSessionService implements RealtimeSessionServicing {
         return null;
       }
     }
+
     if (value is! Map) {
       return null;
     }
+
     final roomID = _nonEmpty(value['room_id']);
     final token = _nonEmpty(value['room_token']);
     final userID = _nonEmpty(value['user_id']) ?? fallbackUserID;
+
     if (roomID == null || token == null || userID == null) {
       return null;
     }
+
     return RealtimeSessionConnection(
       roomID: roomID,
       userID: userID,

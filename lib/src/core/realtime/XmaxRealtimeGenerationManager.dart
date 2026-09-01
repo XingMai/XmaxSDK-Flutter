@@ -34,21 +34,27 @@ final class XmaxRealtimeGenerationManager {
         message: 'A realtime context is required for the first generation',
       );
     }
+
     final taskID = _taskIDGenerator();
+
     try {
       await _streamController.beginGeneration(
         taskID: taskID,
         videoFormat: videoFormat,
         context: resolvedContext,
       );
+
       ensureCurrent();
+
       _interactionController.startInteraction(
         taskID: taskID,
         videoFormat: videoFormat,
       );
+
       _currentContext = resolvedContext;
       return taskID;
     } catch (error) {
+      // The start signal may have reached the room before a later step failed.
       await _streamController.stopGeneration(taskID: taskID);
       throw XmaxError.from(error);
     }
@@ -63,14 +69,17 @@ final class XmaxRealtimeGenerationManager {
       taskID: taskID,
       videoFormat: videoFormat,
     );
+
     if (context == null) {
       return;
     }
+
     await _streamController.updateGeneration(
       taskID: taskID,
       videoFormat: videoFormat,
       context: context,
     );
+
     _currentContext = context;
   }
 
@@ -87,9 +96,12 @@ final class XmaxRealtimeGenerationManager {
   static String createTaskID() {
     final random = Random.secure();
     final bytes = List<int>.generate(16, (_) => random.nextInt(256));
+
+    // Encode 128 random bits directly as unpadded base64url, matching iOS.
     const alphabet =
         'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
     final output = StringBuffer('task-');
+
     for (var index = 0; index < bytes.length; index += 3) {
       final remaining = bytes.length - index;
       final value =
@@ -101,6 +113,7 @@ final class XmaxRealtimeGenerationManager {
       if (remaining > 1) output.write(alphabet[(value >> 6) & 63]);
       if (remaining > 2) output.write(alphabet[value & 63]);
     }
+
     return output.toString();
   }
 }

@@ -56,9 +56,13 @@ final class MediaController implements MediaControlling {
             'Stop the current local media stream before creating another one',
       );
     }
+
     _ensureNoOperation();
+
+    // Reserve the source before awaiting RTC initialization to prevent races.
     _operationInProgress = true;
     _hasActiveSource = true;
+
     try {
       await _rtcManager.initialize();
       return await _cameraController.createLocalCameraStream(
@@ -79,6 +83,7 @@ final class MediaController implements MediaControlling {
     if (!_hasActiveSource) {
       return;
     }
+
     await _stopCurrentSource();
   }
 
@@ -92,7 +97,9 @@ final class MediaController implements MediaControlling {
         message: 'A local media operation is already in progress',
       );
     }
+
     _operationInProgress = true;
+
     try {
       await _cameraController.stopLocalCameraStream();
       await _rtcManager.destroy();
@@ -110,8 +117,10 @@ final class MediaController implements MediaControlling {
         message: 'Local camera preview is not started',
       );
     }
+
     _ensureNoOperation();
     _operationInProgress = true;
+
     try {
       return await _cameraController.switchCamera();
     } finally {

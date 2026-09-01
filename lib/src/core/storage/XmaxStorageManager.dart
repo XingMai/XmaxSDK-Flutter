@@ -117,16 +117,20 @@ final class XmaxStorageManager implements XmaxStorageManaging {
         message: 'Exactly one of data or at must be provided',
       );
     }
+
     final StoredFile stored;
+
     if (data != null) {
       final resolvedFileName = fileName?.trim() ?? '';
       final resolvedContentType = contentType?.trim() ?? '';
+
       if (resolvedFileName.isEmpty || resolvedContentType.isEmpty) {
         throw const XmaxError(
           code: XmaxErrorCode.invalidConfiguration,
           message: 'Data uploads require fileName and contentType',
         );
       }
+
       stored = await dataOperation(
         data: data,
         fileName: resolvedFileName,
@@ -140,6 +144,7 @@ final class XmaxStorageManager implements XmaxStorageManaging {
         progress: _progressListener(progress),
       );
     }
+
     return createXmaxUploadedFile(
       url: stored.url,
       objectKey: stored.objectKey,

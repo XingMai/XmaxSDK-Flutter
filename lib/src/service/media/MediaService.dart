@@ -17,6 +17,7 @@ final class MediaService implements MediaServicing {
     final double scale;
     final double Function(num) rounding;
 
+    // Scale into the model's pixel budget before aligning both dimensions.
     if (pixels < _minimumModelPixels) {
       scale = math.sqrt(_minimumModelPixels / pixels);
       rounding = (value) => value.ceilToDouble();
@@ -28,6 +29,7 @@ final class MediaService implements MediaServicing {
       rounding = (value) => value.roundToDouble();
     }
 
+    // The model requires dimensions aligned to 32 pixels.
     final width = math.max(
       rounding(validated.width * scale / _modelSizeAlignment).toInt() *
           _modelSizeAlignment,
@@ -38,6 +40,7 @@ final class MediaService implements MediaServicing {
           _modelSizeAlignment,
       _modelSizeAlignment,
     );
+
     return Size(width.toDouble(), height.toDouble());
   }
 

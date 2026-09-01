@@ -17,8 +17,11 @@ abstract final class InteractionCoordinateMapper {
         videoSize.height <= 0) {
       return null;
     }
+
     final widthScale = viewportSize.width / videoSize.width;
     final heightScale = viewportSize.height / videoSize.height;
+
+    // Fill crops with the larger scale; fit letterboxes with the smaller one.
     final scale = contentMode == VideoContentMode.fill
         ? math.max(widthScale, heightScale)
         : math.min(widthScale, heightScale);
@@ -26,6 +29,7 @@ abstract final class InteractionCoordinateMapper {
       videoSize.width * scale,
       videoSize.height * scale,
     );
+
     return Rect.fromLTWH(
       (viewportSize.width - displayedSize.width) / 2,
       (viewportSize.height - displayedSize.height) / 2,
@@ -45,12 +49,16 @@ abstract final class InteractionCoordinateMapper {
       videoSize: videoSize,
       contentMode: contentMode,
     );
+
     if (!point.dx.isFinite || !point.dy.isFinite || frame == null) {
       return null;
     }
+
     if (contentMode == VideoContentMode.fit && !frame.contains(point)) {
       return null;
     }
+
+    // Translate from the displayed crop/letterbox back into model pixels.
     final scale = frame.width / videoSize.width;
     final x = ((point.dx - frame.left) / scale).round().clamp(
       0,
@@ -60,6 +68,7 @@ abstract final class InteractionCoordinateMapper {
       0,
       videoSize.height.toInt() - 1,
     );
+
     return RealtimePoint(x: x.toDouble(), y: y.toDouble());
   }
 }

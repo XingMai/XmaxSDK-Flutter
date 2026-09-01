@@ -158,8 +158,10 @@ final class StorageService implements StorageServicing {
         contentType: contentType,
         mediaType: mediaType,
       );
+
       final temporary = await _fetchStorageConfiguration();
       final objectKey = _makeObjectKey(temporary.prefix, safeName);
+
       final stored = await _storageManager.upload(
         source: source,
         objectKey: objectKey,
@@ -167,9 +169,12 @@ final class StorageService implements StorageServicing {
         configuration: temporary.configuration,
         progress: progress,
       );
+
       if (!checksSafety) {
         return stored;
       }
+
+      // Safety checking happens after COS upload because the API checks a URL.
       final checkedURL = await _checkImage(stored.url);
       return StoredFile(
         url: checkedURL,
@@ -204,12 +209,14 @@ final class StorageService implements StorageServicing {
       '/cos/sts',
       (json) => Map<String, dynamic>.from(json! as Map),
     );
+
     const message = 'Invalid storage credential payload';
     final credentials = payload['credentials'];
     final bucket = _requiredString(payload['bucket']);
     final region = _requiredString(payload['region']);
     final endpoint = _normalizedString(payload['endpoint']);
     final prefix = _normalizedString(payload['prefix']);
+
     if (credentials is! Map ||
         bucket == null ||
         region == null ||
@@ -217,14 +224,17 @@ final class StorageService implements StorageServicing {
         prefix == null) {
       throw const XmaxError(code: XmaxErrorCode.apiError, message: message);
     }
+
     final accessKeyID = _requiredString(credentials['accessKeyId']);
     final secretAccessKey = _requiredString(credentials['secretAccessKey']);
     final sessionToken = _requiredString(credentials['sessionToken']);
+
     if (accessKeyID == null ||
         secretAccessKey == null ||
         sessionToken == null) {
       throw const XmaxError(code: XmaxErrorCode.apiError, message: message);
     }
+
     return _TemporaryStorageConfiguration(
       prefix: prefix,
       configuration: StorageConfiguration(
@@ -246,19 +256,24 @@ final class StorageService implements StorageServicing {
       (json) => Map<String, dynamic>.from(json! as Map),
       body: <String, Object?>{'url': url.toString()},
     );
+
     const message = 'Invalid image safety check payload';
     final safe = payload['safe'];
+
     if (safe is! bool) {
       throw const XmaxError(code: XmaxErrorCode.apiError, message: message);
     }
+
     if (!safe) {
       throw const XmaxError(
         code: XmaxErrorCode.unsafeImage,
         message: 'The image did not pass the safety check',
       );
     }
+
     final value = _normalizedString(payload['url']);
     final checkedURL = value == null ? null : Uri.tryParse(value);
+
     if (checkedURL == null || !_isHTTPURL(checkedURL)) {
       throw const XmaxError(code: XmaxErrorCode.apiError, message: message);
     }
@@ -291,6 +306,7 @@ final class StorageService implements StorageServicing {
           );
         }
     }
+
     if (!contentType.trim().toLowerCase().startsWith('${mediaType.value}/')) {
       throw XmaxError(
         code: XmaxErrorCode.invalidConfiguration,
@@ -299,13 +315,16 @@ final class StorageService implements StorageServicing {
             '${mediaType.value}/',
       );
     }
+
     final safeName = _sanitizeFileName(fileName);
+
     if (safeName.isEmpty) {
       throw XmaxError(
         code: XmaxErrorCode.invalidConfiguration,
         message: '${mediaType.displayName} file name cannot be empty',
       );
     }
+
     return safeName;
   }
 
@@ -316,6 +335,7 @@ final class StorageService implements StorageServicing {
         message: 'Invalid download URL',
       );
     }
+
     if (!destinationURL.isScheme('file') || destinationURL.path.isEmpty) {
       throw const XmaxError(
         code: XmaxErrorCode.invalidConfiguration,
@@ -362,12 +382,14 @@ final class StorageService implements StorageServicing {
     final dot = fileName.lastIndexOf('.');
     final extension = dot < 0 ? '' : fileName.substring(dot + 1).toLowerCase();
     final contentType = types[extension];
+
     if (contentType == null) {
       throw XmaxError(
         code: XmaxErrorCode.invalidConfiguration,
         message: 'Unable to infer $mediaType content type from file extension',
       );
     }
+
     return contentType;
   }
 
@@ -376,6 +398,7 @@ final class StorageService implements StorageServicing {
         .trim()
         .replaceAll(RegExp(r'[^A-Za-z0-9._-]+'), '_')
         .replaceAll(RegExp('_+'), '_');
+
     result = result.replaceAll(RegExp(r'^[._-]+|[._-]+$'), '');
     return result;
   }
@@ -406,11 +429,15 @@ final class StorageService implements StorageServicing {
   static String _makeIdentifier() {
     final random = Random.secure();
     final bytes = List<int>.generate(16, (_) => random.nextInt(256));
+
+    // Set RFC 4122 version and variant bits before formatting the UUID.
     bytes[6] = (bytes[6] & 0x0f) | 0x40;
     bytes[8] = (bytes[8] & 0x3f) | 0x80;
+
     final value = bytes
         .map((byte) => byte.toRadixString(16).padLeft(2, '0'))
         .join();
+
     return '${value.substring(0, 8)}-${value.substring(8, 12)}-'
         '${value.substring(12, 16)}-${value.substring(16, 20)}-'
         '${value.substring(20)}';
