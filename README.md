@@ -9,7 +9,7 @@
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-MIT-4C9A2A" alt="MIT License"></a>
 </p>
 
-Flutter SDK, providing access to the real-time interactive video generation
+A Flutter SDK which provides access to the real-time interactive video generation
 models from Xmax AI. It enables low-latency, high-fidelity video transformations
 using live video streams, reference images, and user interactions.
 With just a few lines of code, developers can integrate features such as
@@ -410,35 +410,11 @@ flutter pub get
 flutter run
 ```
 
-The API key is stored only in the device's local preferences by the example and is
-not written to the repository.
-
 ## Dependencies
 
 - VolcEngine RTC Flutter SDK provides real-time audio and video communication.
 - Tencent Cloud COS Flutter SDK provides image and video transfer through object
   storage.
-- `permission_handler` provides the cross-platform camera permission flow.
-
-## Development
-
-This repository uses [FVM](https://fvm.app/) to pin Flutter for local development:
-
-```bash
-fvm flutter pub get
-fvm flutter analyze
-fvm flutter test
-
-cd example
-fvm flutter build apk --debug
-fvm flutter build ios --debug --no-codesign
-```
-
-Additional implementation and API-alignment notes are available in:
-
-- [`docs/API_PARITY.md`](docs/API_PARITY.md)
-- [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md)
-- [`docs/BOOTSTRAP_AND_EXAMPLE.md`](docs/BOOTSTRAP_AND_EXAMPLE.md)
 
 ## Feedback
 
