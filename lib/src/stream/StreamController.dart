@@ -166,7 +166,7 @@ final class StreamController implements StreamControlling {
   }
 
   @override
-  Future<void> beginGeneration({
+  Future<GenerationStartConfirmation> beginGeneration({
     required String taskID,
     required RealtimeVideoFormat videoFormat,
     required RealtimeContext context,
@@ -194,6 +194,9 @@ final class StreamController implements StreamControlling {
 
     // Generation is acknowledged by an SEI message carrying this task ID.
     final completer = Completer<void>();
+    // A cancellation may arrive immediately after the start signal is sent.
+    // Attach a handler before exposing the confirmation to its caller.
+    completer.future.ignore();
     _generationTaskID = taskID;
     _generationCompleter = completer;
     _generationTimer = Timer(generationTimeout, () {
@@ -211,7 +214,20 @@ final class StreamController implements StreamControlling {
         videoFormat: videoFormat,
         context: context,
       );
-      await completer.future;
+      return GenerationStartConfirmation(
+        value: completer.future,
+        onCancel: () {
+          if (_generationTaskID == taskID &&
+              identical(_generationCompleter, completer)) {
+            _rejectGeneration(
+              const XmaxError(
+                code: XmaxErrorCode.cancelled,
+                message: 'Realtime generation start cancelled',
+              ),
+            );
+          }
+        },
+      );
     } catch (error) {
       // The current invocation already reports this failure to its caller.
       // Detach its completer first so cleanup does not emit a second,

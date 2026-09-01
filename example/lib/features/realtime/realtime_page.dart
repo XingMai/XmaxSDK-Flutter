@@ -51,6 +51,7 @@ class _RealtimePageState extends State<RealtimePage>
   bool _isLoading = true;
   Animation<double>? _routeAnimation;
   bool _hasScheduledInitialCameraStart = false;
+  int _realtimeOperationVersion = 0;
   final _referenceUploadTokens = <String, Object>{};
   late final _XLabTrajectoryRenderer? _customRenderer = widget.customTrajectory
       ? _XLabTrajectoryRenderer()
@@ -164,6 +165,8 @@ class _RealtimePageState extends State<RealtimePage>
 
   Future<void> _startCamera() async {
     if (_busy || _localStream != null) return;
+
+    final operation = ++_realtimeOperationVersion;
     setState(() {
       _busy = true;
       _cameraReady = false;
@@ -174,56 +177,78 @@ class _RealtimePageState extends State<RealtimePage>
       final stream = await _manager.createLocalCameraStream(
         videoFormat: _cameraFormat,
       );
-      if (mounted) setState(() => _localStream = stream);
+      if (_isCurrentRealtimeOperation(operation)) {
+        setState(() => _localStream = stream);
+      }
     } catch (error) {
-      _showError(error);
-      if (mounted) setState(() => _isLoading = false);
+      if (_isCurrentRealtimeOperation(operation)) {
+        _showError(error);
+        setState(() => _isLoading = false);
+      }
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (_isCurrentRealtimeOperation(operation)) {
+        setState(() => _busy = false);
+      }
     }
   }
 
   Future<void> _startGeneration(RealtimeContext context) async {
-    if (_busy) return;
     final localStream = _localStream;
     if (localStream == null) return;
+
+    // Only the newest UI operation may publish async results back to XLab.
+    final operation = ++_realtimeOperationVersion;
     setState(() {
       _busy = true;
       _isLoading = true;
       _lastError = null;
     });
     try {
-      final generating =
-          _state.connectionState == RealtimeConnectionState.generating;
+      final connectionState = _state.connectionState;
+      final hasOpenConnection =
+          connectionState == RealtimeConnectionState.connected ||
+          connectionState == RealtimeConnectionState.generating;
       final remote = await _manager.startGeneration(
-        localStream: generating ? null : localStream,
+        localStream: hasOpenConnection ? null : localStream,
         context: context,
       );
 
-      if (!mounted) return;
+      if (!_isCurrentRealtimeOperation(operation)) return;
       setState(() {
         if (remote != null) _remoteStream = remote;
         _isLoading = false;
       });
     } catch (error) {
-      _showError(error);
-      if (mounted) setState(() => _isLoading = false);
+      if (_isCurrentRealtimeOperation(operation)) {
+        _showError(error);
+        setState(() => _isLoading = false);
+      }
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (_isCurrentRealtimeOperation(operation)) {
+        setState(() => _busy = false);
+      }
     }
   }
 
   Future<void> _stopGeneration() async {
-    if (_busy || _state.connectionState != RealtimeConnectionState.generating) {
+    final connectionState = _state.connectionState;
+    final canStop =
+        _busy ||
+        connectionState == RealtimeConnectionState.connecting ||
+        connectionState == RealtimeConnectionState.connected ||
+        connectionState == RealtimeConnectionState.generating;
+    if (!canStop) {
       return;
     }
+
+    final operation = ++_realtimeOperationVersion;
     setState(() {
       _busy = true;
       _isLoading = !_cameraReady;
     });
     try {
       await _manager.disconnect();
-      if (mounted) {
+      if (_isCurrentRealtimeOperation(operation)) {
         setState(() {
           _remoteStream = null;
           _selectedReference = null;
@@ -231,10 +256,14 @@ class _RealtimePageState extends State<RealtimePage>
         });
       }
     } catch (error) {
-      _showError(error);
-      if (mounted) setState(() => _isLoading = !_cameraReady);
+      if (_isCurrentRealtimeOperation(operation)) {
+        _showError(error);
+        setState(() => _isLoading = !_cameraReady);
+      }
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (_isCurrentRealtimeOperation(operation)) {
+        setState(() => _busy = false);
+      }
     }
   }
 
@@ -243,12 +272,15 @@ class _RealtimePageState extends State<RealtimePage>
     setState(() => _panelMode = mode);
   }
 
-  Future<void> _selectReference(XLabRealtimeReference? reference) async {
-    setState(() => _selectedReference = reference);
-    if (reference == null) {
+  Future<void> _selectReference(XLabRealtimeReference reference) async {
+    final isCancellingSelection = _selectedReference?.id == reference.id;
+    if (isCancellingSelection) {
+      setState(() => _selectedReference = null);
       await _stopGeneration();
       return;
     }
+
+    setState(() => _selectedReference = reference);
 
     switch (reference.uploadState) {
       case XLabRealtimeReferenceUploadState.uploading:
@@ -410,6 +442,8 @@ class _RealtimePageState extends State<RealtimePage>
 
   Future<void> _switchCamera() async {
     if (_busy || _localStream == null) return;
+
+    final operation = ++_realtimeOperationVersion;
     final wasGenerating =
         _state.connectionState == RealtimeConnectionState.generating;
     setState(() {
@@ -420,19 +454,26 @@ class _RealtimePageState extends State<RealtimePage>
     });
     try {
       final stream = await _manager.switchCamera();
-      if (mounted) {
+      if (_isCurrentRealtimeOperation(operation)) {
         setState(() {
           _localStream = stream;
           _isLoading = wasGenerating ? false : !_cameraReady;
         });
       }
     } catch (error) {
-      _showError(error);
-      if (mounted) setState(() => _isLoading = !_cameraReady);
+      if (_isCurrentRealtimeOperation(operation)) {
+        _showError(error);
+        setState(() => _isLoading = !_cameraReady);
+      }
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (_isCurrentRealtimeOperation(operation)) {
+        setState(() => _busy = false);
+      }
     }
   }
+
+  bool _isCurrentRealtimeOperation(int operation) =>
+      mounted && operation == _realtimeOperationVersion;
 
   void _showError(Object error) {
     final xmaxError = XmaxError.from(error);
@@ -454,12 +495,14 @@ class _RealtimePageState extends State<RealtimePage>
   }
 
   Future<void> _suspend() async {
+    final operation = ++_realtimeOperationVersion;
     await _manager.close();
-    if (mounted) {
+    if (_isCurrentRealtimeOperation(operation)) {
       setState(() {
         _localStream = null;
         _remoteStream = null;
         _cameraReady = false;
+        _busy = false;
         _isLoading = false;
       });
     }
@@ -467,6 +510,7 @@ class _RealtimePageState extends State<RealtimePage>
 
   @override
   void dispose() {
+    _realtimeOperationVersion += 1;
     _routeAnimation?.removeStatusListener(_routeAnimationDidChange);
     WidgetsBinding.instance.removeObserver(this);
     _manager.setStateListener(null);

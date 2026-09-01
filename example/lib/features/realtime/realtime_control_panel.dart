@@ -106,7 +106,7 @@ final class XLabRealtimeControlPanel extends StatelessWidget {
   final XLabRealtimeReference? promptReference;
   final ValueChanged<XLabRealtimePanelMode> onModeChanged;
   final VoidCallback onStop;
-  final ValueChanged<XLabRealtimeReference?> onReferenceChanged;
+  final ValueChanged<XLabRealtimeReference> onReferenceChanged;
   final VoidCallback onAddReference;
   final VoidCallback onTouchStart;
   final VoidCallback onPromptSubmit;
@@ -155,7 +155,7 @@ final class XLabRealtimeControlPanel extends StatelessWidget {
                       final selected = item == mode;
                       return GestureDetector(
                         behavior: HitTestBehavior.opaque,
-                        onTap: busy ? null : () => onModeChanged(item),
+                        onTap: () => onModeChanged(item),
                         child: Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 4),
                           child: Center(
@@ -319,7 +319,7 @@ final class _ReferenceStrip extends StatefulWidget {
   final List<XLabRealtimeReference> references;
   final XLabRealtimeReference? selectedReference;
   final bool isVisible;
-  final ValueChanged<XLabRealtimeReference?> onReferenceChanged;
+  final ValueChanged<XLabRealtimeReference> onReferenceChanged;
   final VoidCallback onAddReference;
 
   @override
@@ -394,13 +394,7 @@ final class _ReferenceStripState extends State<_ReferenceStrip> {
       final selected = widget.selectedReference?.id == reference.id;
       return GestureDetector(
         key: _referenceKeys.putIfAbsent(reference.id, GlobalKey.new),
-        onTap: () => widget.onReferenceChanged(
-          reference.uploadState == XLabRealtimeReferenceUploadState.failed
-              ? reference
-              : selected
-              ? null
-              : reference,
-        ),
+        onTap: () => widget.onReferenceChanged(reference),
         child: Container(
           key: ValueKey<String>('reference-${reference.id}'),
           width: 44,

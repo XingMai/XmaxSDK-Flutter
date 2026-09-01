@@ -103,6 +103,86 @@ void main() {
     expect(referenceActions, 1);
   });
 
+  testWidgets('reference cells always report the concrete tapped item', (
+    tester,
+  ) async {
+    final controller = TextEditingController();
+    addTearDown(controller.dispose);
+    final first = _reference(id: 'first', referencePath: '/first.png');
+    final second = _reference(id: 'second', referencePath: '/second.png');
+    final tapped = <XLabRealtimeReference>[];
+
+    await tester.pumpWidget(
+      _TestApp(
+        child: XLabRealtimeControlPanel(
+          mode: XLabRealtimePanelMode.character,
+          generating: true,
+          busy: false,
+          promptController: controller,
+          referencesByCategory: <String, List<XLabRealtimeReference>>{
+            XLabRealtimePanelMode.character.id: <XLabRealtimeReference>[
+              first,
+              second,
+            ],
+          },
+          selectedReference: first,
+          onModeChanged: (_) {},
+          onStop: () {},
+          onReferenceChanged: tapped.add,
+          onAddReference: () {},
+          onTouchStart: () {},
+          onPromptSubmit: () {},
+          onPromptReference: () {},
+        ),
+      ),
+    );
+
+    await tester.tap(find.byKey(const ValueKey('reference-second')));
+    await tester.tap(find.byKey(const ValueKey('reference-first')));
+
+    expect(tapped, <XLabRealtimeReference>[second, first]);
+  });
+
+  testWidgets('reference cells remain interactive while an operation is busy', (
+    tester,
+  ) async {
+    final controller = TextEditingController();
+    addTearDown(controller.dispose);
+    final reference = _reference(id: 'busy', referencePath: '/busy.png');
+    var taps = 0;
+    var categoryChanges = 0;
+
+    await tester.pumpWidget(
+      _TestApp(
+        child: XLabRealtimeControlPanel(
+          mode: XLabRealtimePanelMode.character,
+          generating: true,
+          busy: true,
+          promptController: controller,
+          referencesByCategory: <String, List<XLabRealtimeReference>>{
+            XLabRealtimePanelMode.character.id: <XLabRealtimeReference>[
+              reference,
+            ],
+          },
+          selectedReference: null,
+          onModeChanged: (_) => categoryChanges += 1,
+          onStop: () {},
+          onReferenceChanged: (_) => taps += 1,
+          onAddReference: () {},
+          onTouchStart: () {},
+          onPromptSubmit: () {},
+          onPromptReference: () {},
+        ),
+      ),
+    );
+
+    await tester.tap(find.byKey(const ValueKey('reference-busy')));
+    await tester.tap(find.text('换装'));
+
+    expect(taps, 1);
+    expect(categoryChanges, 1);
+  });
+
   testWidgets('free reference blocks removal and submission while uploading', (
     tester,
   ) async {

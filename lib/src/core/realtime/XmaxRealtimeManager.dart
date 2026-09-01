@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import '../../foundation/errors/XmaxError.dart';
 import '../../foundation/media/camera/CameraPosition.dart';
 import '../../foundation/rtc/RtcManager.dart';
@@ -98,6 +100,11 @@ final class XmaxRealtimeManager implements XmaxRealtimeManaging {
   );
   RealtimeStateListener? _stateListener;
   int _operationVersion = 0;
+  int _generationRequestVersion = 0;
+  int _generationCancellationVersion = 0;
+  Future<void> _generationOperation = Future<void>.value();
+  String? _startingGenerationTaskID;
+  Completer<void>? _startingGenerationCompleter;
   Future<void>? _closeFuture;
   Future<void>? _disconnectFuture;
 
@@ -335,6 +342,10 @@ final class XmaxRealtimeManager implements XmaxRealtimeManaging {
 
     if (_state.connectionState == RealtimeConnectionState.idle ||
         _state.connectionState == RealtimeConnectionState.disconnected) {
+      // A generation request may be queued but not have entered connect yet.
+      _generationRequestVersion += 1;
+      _generationCancellationVersion += 1;
+      _generationManager.cancelPendingStart();
       return Future<void>.value();
     }
 
@@ -350,7 +361,11 @@ final class XmaxRealtimeManager implements XmaxRealtimeManaging {
   }) async {
     // Invalidate pending connect/generation callbacks before cleanup starts.
     _operationVersion += 1;
-    final taskID = _state.taskID ?? '';
+    _generationRequestVersion += 1;
+    _generationCancellationVersion += 1;
+    final taskID = _state.taskID ?? _startingGenerationTaskID ?? '';
+
+    _cancelStartingGeneration();
 
     _emit(
       const RealtimeState(
@@ -403,6 +418,35 @@ final class XmaxRealtimeManager implements XmaxRealtimeManaging {
     RealtimeMediaStream? localStream,
     RealtimeContext? context,
   }) async {
+    // Match iOS Task cancellation: a newer request supersedes an older request
+    // that is still connecting or waiting for its generation SEI.
+    final requestVersion = ++_generationRequestVersion;
+    _generationManager.cancelPendingStart();
+
+    final prepared = await _enqueueGenerationOperation(
+      () => _prepareGeneration(
+        localStream: localStream,
+        context: context,
+        requestVersion: requestVersion,
+      ),
+    );
+
+    // Waiting for the first decoded frame must not block later condition
+    // changes. Only the short task mutation above is serialized.
+    await prepared.readiness;
+    return prepared.remoteStream;
+  }
+
+  Future<_PreparedGeneration> _prepareGeneration({
+    required RealtimeMediaStream? localStream,
+    required RealtimeContext? context,
+    required int requestVersion,
+  }) async {
+    // A selection made during teardown should start after that teardown rather
+    // than failing because the previous RTC session is still disconnecting.
+    await _disconnectFuture;
+    _ensureGenerationRequestCurrent(requestVersion);
+
     if (localStream != null && !_mediaController.owns(localStream)) {
       throw _report(
         const XmaxError(
@@ -420,14 +464,24 @@ final class XmaxRealtimeManager implements XmaxRealtimeManaging {
         remoteStream = _connectionManager.currentRemoteStream;
       } else {
         remoteStream = await connect(localStream: localStream);
+        _ensureGenerationRequestCurrent(requestVersion);
       }
     }
 
-    await _performStartGeneration(context);
-    return remoteStream;
+    final task = await _prepareGenerationTask(
+      context,
+      requestVersion: requestVersion,
+    );
+    return _PreparedGeneration(
+      remoteStream: remoteStream,
+      readiness: task.readiness,
+    );
   }
 
-  Future<void> _performStartGeneration(RealtimeContext? context) async {
+  Future<_PreparedGenerationTask> _prepareGenerationTask(
+    RealtimeContext? context, {
+    required int requestVersion,
+  }) async {
     final sessionID = _connectionManager.currentSessionID;
     final videoFormat = _mediaController.currentVideoFormat;
     if (sessionID.isEmpty ||
@@ -442,35 +496,75 @@ final class XmaxRealtimeManager implements XmaxRealtimeManaging {
       );
     }
 
-    if (_state.connectionState == RealtimeConnectionState.generating &&
-        _state.taskID != null) {
+    final activeTaskID = _state.taskID ?? _startingGenerationTaskID;
+    if (activeTaskID != null) {
       try {
         await _generationManager.update(
-          taskID: _state.taskID!,
+          taskID: activeTaskID,
           videoFormat: videoFormat,
           context: context,
         );
-        return;
+
+        return _PreparedGenerationTask(
+          readiness:
+              _startingGenerationCompleter?.future ?? Future<void>.value(),
+        );
       } catch (error) {
+        if (requestVersion != _generationRequestVersion) {
+          throw XmaxError.from(error);
+        }
         throw _report(error);
       }
     }
 
     final version = _operationVersion;
-    String? taskID;
-
     try {
-      taskID = await _generationManager.start(
+      final taskID = await _generationManager.start(
         videoFormat: videoFormat,
         context: context,
         ensureCurrent: () => _ensureCurrent(version),
       );
 
+      final completer = Completer<void>();
+      // Register a handler immediately so a synchronous render failure cannot
+      // surface as an unhandled asynchronous error before callers await it.
+      completer.future.ignore();
+
+      _startingGenerationTaskID = taskID;
+      _startingGenerationCompleter = completer;
+      unawaited(
+        _completeGenerationStart(
+          sessionID: sessionID,
+          taskID: taskID,
+          operationVersion: version,
+          completer: completer,
+        ),
+      );
+
+      return _PreparedGenerationTask(readiness: completer.future);
+    } catch (error) {
+      // Supersession is an internal control-flow event, matching a cancelled
+      // Swift Task. It must not be surfaced to the SDK error listener.
+      if (requestVersion != _generationRequestVersion) {
+        throw XmaxError.from(error);
+      }
+      throw _report(error);
+    }
+  }
+
+  Future<void> _completeGenerationStart({
+    required String sessionID,
+    required String taskID,
+    required int operationVersion,
+    required Completer<void> completer,
+  }) async {
+    try {
       // Video becomes usable only after both rendering and audio are ready.
+      // This phase intentionally runs outside the generation mutation queue.
       await _renderController.waitUntilRemoteFrameReady();
       await _streamController.activateRemoteAudio();
 
-      _ensureCurrent(version);
+      _ensureCurrent(operationVersion);
       if (_connectionManager.currentSessionID != sessionID) {
         throw const XmaxError(
           code: XmaxErrorCode.cancelled,
@@ -485,17 +579,38 @@ final class XmaxRealtimeManager implements XmaxRealtimeManaging {
           taskID: taskID,
         ),
       );
-    } catch (error) {
-      // A task created before a later failure must be stopped explicitly.
-      if (taskID != null) {
-        await _generationManager.stop(taskID: taskID);
+
+      if (!completer.isCompleted) {
+        completer.complete();
       }
-      throw _report(error);
+    } catch (error) {
+      // If stop/disconnect already completed the waiter, that path also owns
+      // task cleanup. Otherwise a render failure must stop the created task.
+      if (!completer.isCompleted) {
+        try {
+          await _generationManager.stop(taskID: taskID);
+        } catch (stopError) {
+          _report(stopError);
+        }
+
+        completer.completeError(_report(error));
+      }
+    } finally {
+      if (identical(_startingGenerationCompleter, completer)) {
+        _startingGenerationTaskID = null;
+        _startingGenerationCompleter = null;
+      }
     }
   }
 
   @override
-  Future<void> stopGeneration() async {
+  Future<void> stopGeneration() {
+    _generationRequestVersion += 1;
+    _generationManager.cancelPendingStart();
+    return _enqueueGenerationOperation(_performStopGeneration);
+  }
+
+  Future<void> _performStopGeneration() async {
     final sessionID = _connectionManager.currentSessionID;
     if (sessionID.isEmpty ||
         (_state.connectionState != RealtimeConnectionState.connected &&
@@ -503,11 +618,19 @@ final class XmaxRealtimeManager implements XmaxRealtimeManaging {
       return;
     }
 
+    final taskID = _state.taskID ?? _startingGenerationTaskID ?? '';
     final wasGenerating =
-        _state.connectionState == RealtimeConnectionState.generating;
+        _state.connectionState == RealtimeConnectionState.generating ||
+        _startingGenerationTaskID != null;
+
+    // Prevent an in-flight first-frame waiter from publishing `generating`
+    // after this stop has already completed.
+    _operationVersion += 1;
+    _generationRequestVersion += 1;
+    _cancelStartingGeneration();
 
     try {
-      await _generationManager.stop(taskID: _state.taskID ?? '');
+      await _generationManager.stop(taskID: taskID);
     } catch (error) {
       _report(error);
     }
@@ -517,6 +640,43 @@ final class XmaxRealtimeManager implements XmaxRealtimeManaging {
         RealtimeState(
           connectionState: RealtimeConnectionState.connected,
           sessionID: sessionID,
+        ),
+      );
+    }
+  }
+
+  Future<T> _enqueueGenerationOperation<T>(Future<T> Function() operation) {
+    // Dart Futures cannot be cancelled. Run generation mutations in request
+    // order, and let disconnect invalidate work that has not completed yet.
+    final cancellationVersion = _generationCancellationVersion;
+    final previousOperation = _generationOperation;
+    final completion = Completer<void>();
+    _generationOperation = completion.future;
+
+    return () async {
+      await previousOperation;
+
+      try {
+        _ensureGenerationOperationCurrent(cancellationVersion);
+        final result = await operation();
+        _ensureGenerationOperationCurrent(cancellationVersion);
+        return result;
+      } finally {
+        completion.complete();
+      }
+    }();
+  }
+
+  void _cancelStartingGeneration() {
+    final completer = _startingGenerationCompleter;
+    _startingGenerationTaskID = null;
+    _startingGenerationCompleter = null;
+
+    if (completer != null && !completer.isCompleted) {
+      completer.completeError(
+        const XmaxError(
+          code: XmaxErrorCode.cancelled,
+          message: 'Realtime generation was cancelled',
         ),
       );
     }
@@ -547,6 +707,24 @@ final class XmaxRealtimeManager implements XmaxRealtimeManaging {
     }
   }
 
+  void _ensureGenerationOperationCurrent(int version) {
+    if (version != _generationCancellationVersion) {
+      throw const XmaxError(
+        code: XmaxErrorCode.cancelled,
+        message: 'Realtime generation operation was cancelled',
+      );
+    }
+  }
+
+  void _ensureGenerationRequestCurrent(int version) {
+    if (version != _generationRequestVersion) {
+      throw const XmaxError(
+        code: XmaxErrorCode.cancelled,
+        message: 'Realtime generation request was superseded',
+      );
+    }
+  }
+
   static void _validateAudioVolume(double volume) {
     if (!volume.isFinite || volume < 0 || volume > 1) {
       throw const XmaxError(
@@ -555,4 +733,20 @@ final class XmaxRealtimeManager implements XmaxRealtimeManaging {
       );
     }
   }
+}
+
+final class _PreparedGeneration {
+  const _PreparedGeneration({
+    required this.remoteStream,
+    required this.readiness,
+  });
+
+  final RealtimeMediaStream? remoteStream;
+  final Future<void> readiness;
+}
+
+final class _PreparedGenerationTask {
+  const _PreparedGenerationTask({required this.readiness});
+
+  final Future<void> readiness;
 }

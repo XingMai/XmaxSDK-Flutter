@@ -53,14 +53,13 @@ void main() {
     rtc.listener!.onFirstRemoteVideoFrameDecoded!(remote);
     expect(readyStreams, <RemoteStream>[remote]);
 
-    final generation = controller.beginGeneration(
+    final generation = await controller.beginGeneration(
       taskID: 'task-1',
       videoFormat: const RealtimeVideoFormat(width: 832, height: 1472, fps: 24),
       context: RealtimeContext(prompt: 'animate'),
     );
-    await Future<void>.delayed(Duration.zero);
     rtc.listener!.onSEIMessageReceived!(remote, utf8.encode('task-1'));
-    await generation;
+    await generation.value;
 
     // Matching SEI both selects the renderer and acknowledges generation.
     expect(renderedStreams, <RemoteStream?>[remote]);

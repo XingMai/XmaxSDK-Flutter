@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xmax_sdk/src/core/realtime/RealtimeConfiguration.dart';
 import 'package:xmax_sdk/src/core/realtime/RealtimeErrorHandler.dart';
@@ -83,6 +85,154 @@ void main() {
       ),
     );
     expect(reported?.code, XmaxErrorCode.invalidConfiguration);
+  });
+
+  test('serializes generation updates without disconnecting', () async {
+    final dependencies = _Dependencies();
+    final manager = dependencies.manager;
+    final reportedErrors = <XmaxError>[];
+    await manager.setErrorListener(reportedErrors.add);
+    final localStream = await manager.createLocalCameraStream(
+      videoFormat: _Dependencies.format,
+    );
+
+    await manager.startGeneration(
+      localStream: localStream,
+      context: RealtimeContext(prompt: 'initial'),
+    );
+
+    final firstUpdateStarted = Completer<void>();
+    final releaseFirstUpdate = Completer<void>();
+    dependencies.stream
+      ..firstUpdateStarted = firstUpdateStarted
+      ..updateGate = releaseFirstUpdate;
+
+    final firstUpdate = manager.startGeneration(
+      context: RealtimeContext(prompt: 'reference-a'),
+    );
+    await firstUpdateStarted.future;
+
+    final secondUpdate = manager.startGeneration(
+      context: RealtimeContext(prompt: 'reference-b'),
+    );
+    await Future<void>.delayed(Duration.zero);
+
+    expect(dependencies.stream.updatedPrompts, <String>['reference-a']);
+
+    releaseFirstUpdate.complete();
+    await Future.wait(<Future<RealtimeMediaStream?>>[
+      firstUpdate,
+      secondUpdate,
+    ]);
+
+    expect(dependencies.stream.updatedPrompts, <String>[
+      'reference-a',
+      'reference-b',
+    ]);
+    expect(dependencies.stream.disconnectCount, 0);
+    expect(reportedErrors, isEmpty);
+    expect(
+      (await manager.currentState).connectionState,
+      RealtimeConnectionState.generating,
+    );
+  });
+
+  test(
+    'updates the condition while the first remote frame is loading',
+    () async {
+      final dependencies = _Dependencies();
+      final manager = dependencies.manager;
+      final localStream = await manager.createLocalCameraStream(
+        videoFormat: _Dependencies.format,
+      );
+      final readinessStarted = Completer<void>();
+      final releaseRemoteFrame = Completer<void>();
+      dependencies.render
+        ..readinessStarted = readinessStarted
+        ..readinessGate = releaseRemoteFrame;
+
+      final initialGeneration = manager.startGeneration(
+        localStream: localStream,
+        context: RealtimeContext(prompt: 'reference-a'),
+      );
+      await readinessStarted.future;
+
+      final conditionChanged = manager.startGeneration(
+        context: RealtimeContext(prompt: 'reference-b'),
+      );
+      await Future<void>.delayed(Duration.zero);
+
+      expect(dependencies.stream.updatedPrompts, <String>['reference-b']);
+      expect(dependencies.stream.disconnectCount, 0);
+      expect(
+        (await manager.currentState).connectionState,
+        RealtimeConnectionState.connected,
+      );
+
+      releaseRemoteFrame.complete();
+      await Future.wait(<Future<RealtimeMediaStream?>>[
+        initialGeneration,
+        conditionChanged,
+      ]);
+
+      expect(
+        (await manager.currentState).connectionState,
+        RealtimeConnectionState.generating,
+      );
+    },
+  );
+
+  test('a newer request supersedes a generation waiting for SEI', () async {
+    final dependencies = _Dependencies();
+    final manager = dependencies.manager;
+    final reportedErrors = <XmaxError>[];
+    await manager.setErrorListener(reportedErrors.add);
+    final localStream = await manager.createLocalCameraStream(
+      videoFormat: _Dependencies.format,
+    );
+    final firstStarted = Completer<void>();
+    final secondStarted = Completer<void>();
+    dependencies.stream
+      ..autoConfirmGeneration = false
+      ..firstGenerationStarted = firstStarted
+      ..secondGenerationStarted = secondStarted;
+
+    final firstGeneration = manager.startGeneration(
+      localStream: localStream,
+      context: RealtimeContext(prompt: 'reference-a'),
+    );
+    final firstExpectation = expectLater(
+      firstGeneration,
+      throwsA(
+        isA<XmaxError>().having(
+          (error) => error.code,
+          'code',
+          XmaxErrorCode.cancelled,
+        ),
+      ),
+    );
+    await firstStarted.future;
+
+    final secondGeneration = manager.startGeneration(
+      context: RealtimeContext(prompt: 'reference-b'),
+    );
+    await secondStarted.future;
+
+    expect(dependencies.stream.startedPrompts, <String>[
+      'reference-a',
+      'reference-b',
+    ]);
+    expect(dependencies.stream.disconnectCount, 0);
+    expect(reportedErrors, isEmpty);
+
+    dependencies.stream.confirmGeneration();
+    await secondGeneration;
+    await firstExpectation;
+
+    expect(
+      (await manager.currentState).connectionState,
+      RealtimeConnectionState.generating,
+    );
   });
 }
 
@@ -172,23 +322,73 @@ final class _FakeMedia implements MediaControlling {
 
 final class _FakeStream implements StreamControlling {
   bool generation = false;
+  bool autoConfirmGeneration = true;
+  int disconnectCount = 0;
+  final List<String> startedPrompts = <String>[];
+  final List<String> updatedPrompts = <String>[];
+  Completer<void>? firstGenerationStarted;
+  Completer<void>? secondGenerationStarted;
+  Completer<void>? _generationConfirmation;
+  Completer<void>? firstUpdateStarted;
+  Completer<void>? updateGate;
   @override
   bool get hasGenerationTask => generation;
   @override
   Future<void> activateRemoteAudio() async {}
   @override
-  Future<void> beginGeneration({
+  Future<GenerationStartConfirmation> beginGeneration({
     required String taskID,
     required RealtimeVideoFormat videoFormat,
     required RealtimeContext context,
-  }) async => generation = true;
+  }) async {
+    generation = true;
+    startedPrompts.add(context.prompt);
+
+    if (startedPrompts.length == 1) {
+      firstGenerationStarted?.complete();
+    } else if (startedPrompts.length == 2) {
+      secondGenerationStarted?.complete();
+    }
+
+    final confirmation = Completer<void>();
+    _generationConfirmation = confirmation;
+    if (autoConfirmGeneration) {
+      confirmation.complete();
+    }
+
+    return GenerationStartConfirmation(
+      value: confirmation.future,
+      onCancel: () {
+        if (!confirmation.isCompleted) {
+          confirmation.completeError(
+            const XmaxError(
+              code: XmaxErrorCode.cancelled,
+              message: 'Realtime generation start cancelled',
+            ),
+          );
+        }
+      },
+    );
+  }
+
+  void confirmGeneration() {
+    final confirmation = _generationConfirmation;
+    if (confirmation != null && !confirmation.isCompleted) {
+      confirmation.complete();
+    }
+  }
+
   @override
   Future<void> connect({
     required RealtimeSessionConnection connection,
     required void Function() ensureActive,
   }) async => ensureActive();
   @override
-  Future<void> disconnect() async => generation = false;
+  Future<void> disconnect() async {
+    disconnectCount += 1;
+    generation = false;
+  }
+
   @override
   Future<void> sendTracks({
     required String taskID,
@@ -212,10 +412,20 @@ final class _FakeStream implements StreamControlling {
     required String taskID,
     required RealtimeVideoFormat videoFormat,
     required RealtimeContext context,
-  }) async {}
+  }) async {
+    updatedPrompts.add(context.prompt);
+    final started = firstUpdateStarted;
+    if (started != null && !started.isCompleted) {
+      started.complete();
+    }
+    await updateGate?.future;
+  }
 }
 
 final class _FakeRender implements RenderControlling {
+  Completer<void>? readinessStarted;
+  Completer<void>? readinessGate;
+
   @override
   void notifyRemoteFrameReady(RemoteStream stream) {}
   @override
@@ -228,7 +438,13 @@ final class _FakeRender implements RenderControlling {
   @override
   void setRemoteStream(RemoteStream? stream) {}
   @override
-  Future<void> waitUntilRemoteFrameReady() async {}
+  Future<void> waitUntilRemoteFrameReady() async {
+    final started = readinessStarted;
+    if (started != null && !started.isCompleted) {
+      started.complete();
+    }
+    await readinessGate?.future;
+  }
 }
 
 final class _FakeSessions implements RealtimeSessionServicing {

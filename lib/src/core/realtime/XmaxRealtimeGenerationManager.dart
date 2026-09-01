@@ -21,6 +21,15 @@ final class XmaxRealtimeGenerationManager {
   final StreamControlling _streamController;
   final RealtimeTaskIDGenerator _taskIDGenerator;
   RealtimeContext? _currentContext;
+  GenerationStartConfirmation? _startConfirmation;
+  int _startVersion = 0;
+
+  /// Cancels only the pending SEI handshake and keeps the RTC room connected.
+  /// The running [start] invocation performs the matching remote task cleanup.
+  void cancelPendingStart() {
+    _startVersion += 1;
+    _startConfirmation?.cancel();
+  }
 
   Future<String> start({
     required RealtimeVideoFormat videoFormat,
@@ -36,13 +45,27 @@ final class XmaxRealtimeGenerationManager {
     }
 
     final taskID = _taskIDGenerator();
+    final startVersion = _startVersion;
 
     try {
-      await _streamController.beginGeneration(
+      final confirmation = await _streamController.beginGeneration(
         taskID: taskID,
         videoFormat: videoFormat,
         context: resolvedContext,
       );
+
+      _startConfirmation = confirmation;
+      if (startVersion != _startVersion) {
+        confirmation.cancel();
+      }
+
+      await confirmation.value;
+      if (startVersion != _startVersion) {
+        throw const XmaxError(
+          code: XmaxErrorCode.cancelled,
+          message: 'Realtime generation start cancelled',
+        );
+      }
 
       ensureCurrent();
 
@@ -57,6 +80,8 @@ final class XmaxRealtimeGenerationManager {
       // The start signal may have reached the room before a later step failed.
       await _streamController.stopGeneration(taskID: taskID);
       throw XmaxError.from(error);
+    } finally {
+      _startConfirmation = null;
     }
   }
 
@@ -84,6 +109,7 @@ final class XmaxRealtimeGenerationManager {
   }
 
   Future<void> stop({required String taskID}) async {
+    cancelPendingStart();
     _interactionController.stopInteraction();
     await _streamController.stopGeneration(taskID: taskID);
   }
