@@ -19,6 +19,7 @@ final class RenderController implements RenderControlling {
   RealtimeVideoTrack? _remoteTrack;
   RemoteStream? _remoteStream;
   bool _remoteFrameReady = false;
+  final Set<String> _decodedRemoteStreamKeys = <String>{};
   Completer<void>? _remoteFrameCompleter;
 
   @override
@@ -37,7 +38,8 @@ final class RenderController implements RenderControlling {
   @override
   void setRemoteStream(RemoteStream? stream) {
     _remoteStream = stream;
-    _remoteFrameReady = false;
+    _remoteFrameReady =
+        stream != null && _decodedRemoteStreamKeys.contains(stream.key);
     _cancelWaiter();
 
     final track = _remoteTrack;
@@ -51,6 +53,8 @@ final class RenderController implements RenderControlling {
 
   @override
   void notifyRemoteFrameReady(RemoteStream stream) {
+    _decodedRemoteStreamKeys.add(stream.key);
+
     if (_remoteStream?.key != stream.key) {
       return;
     }
@@ -94,6 +98,7 @@ final class RenderController implements RenderControlling {
     _cancelWaiter();
     _remoteFrameReady = false;
     _remoteStream = null;
+    _decodedRemoteStreamKeys.clear();
 
     final target = track ?? _remoteTrack;
     if (target != null) {

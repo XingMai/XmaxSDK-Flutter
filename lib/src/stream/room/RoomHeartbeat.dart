@@ -19,9 +19,16 @@ final class RoomHeartbeat {
     final version = ++_version;
     _timer = Timer.periodic(interval, (_) {
       if (version == _version) {
-        unawaited(
-          _rtcManager.sendRoomMessage(RoomEvent.heartbeat(userID: userID)),
-        );
+        // Heartbeats run outside an awaited request path. Swallow transport
+        // errors here; connection and generation operations surface their own
+        // actionable failures through the SDK listeners.
+        unawaited(() async {
+          try {
+            await _rtcManager.sendRoomMessage(
+              RoomEvent.heartbeat(userID: userID),
+            );
+          } catch (_) {}
+        }());
       }
     });
   }

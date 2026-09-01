@@ -17,7 +17,7 @@ import 'package:xmax_sdk/src/stream/quality/QualityControlling.dart';
 import 'package:xmax_sdk/src/stream/room/RoomControlling.dart';
 
 void main() {
-  test('remote renderer binds on publish before generation SEI', () async {
+  test('decoded frame is forwarded before SEI selects renderer', () async {
     final rtc = _FakeRtc();
     final renderedStreams = <RemoteStream?>[];
     final readyStreams = <RemoteStream>[];
@@ -47,10 +47,9 @@ void main() {
     );
     rtc.listener!.onRemoteVideoPublished!(remote, true);
 
-    expect(renderedStreams, <RemoteStream?>[remote]);
+    expect(renderedStreams, isEmpty);
 
-    // First-frame readiness must work before SEI so Android can prepare the
-    // renderer without racing decoder startup.
+    // RenderController caches this readiness until SEI selects the stream.
     rtc.listener!.onFirstRemoteVideoFrameDecoded!(remote);
     expect(readyStreams, <RemoteStream>[remote]);
 
@@ -63,8 +62,45 @@ void main() {
     rtc.listener!.onSEIMessageReceived!(remote, utf8.encode('task-1'));
     await generation;
 
-    // Matching SEI acknowledges generation without rebinding the same view.
+    // Matching SEI both selects the renderer and acknowledges generation.
     expect(renderedStreams, <RemoteStream?>[remote]);
+  });
+
+  test('generation send failure is reported only once', () async {
+    final expectedError = StateError('send failed');
+    final controller = StreamController(
+      rtcManager: _FakeRtc(),
+      roomController: _FakeRoom(startError: expectedError),
+      encodingController: _FakeEncoding(),
+      qualityController: _FakeQuality(),
+    );
+
+    await controller.connect(
+      connection: const RealtimeSessionConnection(
+        roomID: 'room',
+        userID: 'local-user',
+        token: 'token',
+        botName: 'bot',
+      ),
+      ensureActive: () {},
+    );
+
+    await expectLater(
+      controller.beginGeneration(
+        taskID: 'task-1',
+        videoFormat: const RealtimeVideoFormat(
+          width: 832,
+          height: 1472,
+          fps: 24,
+        ),
+        context: RealtimeContext(prompt: 'animate'),
+      ),
+      throwsA(same(expectedError)),
+    );
+
+    // Give the zone a turn to surface any duplicate completer error.
+    await Future<void>.delayed(Duration.zero);
+    expect(controller.hasGenerationTask, isFalse);
   });
 }
 
@@ -133,6 +169,10 @@ final class _FakeRtc implements RtcManaging {
 }
 
 final class _FakeRoom implements RoomControlling {
+  _FakeRoom({this.startError});
+
+  final Object? startError;
+
   @override
   Future<void> changeGenerationCondition({
     required String taskID,
@@ -160,7 +200,12 @@ final class _FakeRoom implements RoomControlling {
     required String taskID,
     required RealtimeVideoFormat videoFormat,
     required RealtimeContext context,
-  }) async {}
+  }) async {
+    final error = startError;
+    if (error != null) {
+      throw error;
+    }
+  }
 
   @override
   Future<void> stopGeneration({required String taskID}) async {}

@@ -207,7 +207,16 @@ final class StreamController implements StreamControlling {
       );
       await completer.future;
     } catch (error) {
-      // Cancel both the local waiter and any remote task already requested.
+      // The current invocation already reports this failure to its caller.
+      // Detach its completer first so cleanup does not emit a second,
+      // unobserved cancellation error through the Dart zone.
+      if (identical(_generationCompleter, completer)) {
+        _generationTimer?.cancel();
+        _generationTimer = null;
+        _generationCompleter = null;
+      }
+
+      // Cancel any remote task that may already have received the request.
       await _clearGeneration(notifyRemote: true);
       rethrow;
     }
@@ -270,11 +279,6 @@ final class StreamController implements StreamControlling {
     }
 
     if (published) {
-      // Bind the renderer before subscribing. On Android this gives Flutter a
-      // frame to create the platform view before decoded frames begin arriving.
-      _activeRemoteStream = stream;
-      _remoteStreamListener?.call(stream);
-
       if (_remoteVideoSubscriptions.add(stream.streamID)) {
         unawaited(_subscribeRemoteVideo(stream));
       }
@@ -312,13 +316,9 @@ final class StreamController implements StreamControlling {
       return;
     }
 
-    // A matching SEI acknowledges the pending generation task. The renderer is
-    // already bound from the publish event so decoder startup cannot race view
-    // creation on Android.
-    if (_activeRemoteStream?.key != stream.key) {
-      _activeRemoteStream = stream;
-      _remoteStreamListener?.call(stream);
-    }
+    // A matching SEI selects the stream for the pending generation task.
+    _activeRemoteStream = stream;
+    _remoteStreamListener?.call(stream);
     _generationTimer?.cancel();
     _generationTimer = null;
     _generationCompleter = null;
@@ -326,7 +326,9 @@ final class StreamController implements StreamControlling {
   }
 
   void _onFirstRemoteVideoFrameDecoded(RemoteStream stream) {
-    if (_activeRemoteStream?.key == stream.key) {
+    // Forward decoded frames before SEI as well. RenderController caches them
+    // and applies readiness when the matching SEI later selects the stream.
+    if (_isExpectedRemote(stream)) {
       _remoteFrameReadyListener?.call(stream);
     }
   }

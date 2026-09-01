@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:volc_engine_rtc/volc_engine_rtc.dart';
@@ -18,6 +19,7 @@ final class RtcManager implements RtcManaging {
     : _engineManager = engineManager ?? RtcEngineManager.shared;
 
   static const joinTimeout = Duration(seconds: 15);
+  static const cleanupTimeout = Duration(seconds: 2);
 
   final RtcEngineManager _engineManager;
   RtcEngineLease? _lease;
@@ -157,33 +159,37 @@ final class RtcManager implements RtcManaging {
     _roomID = configuration.roomID;
 
     final completer = Completer<void>();
-    await _check(
-      room.setRTCRoomEventHandler(
-        _makeRoomEventHandler(room: room, joinCompleter: completer),
-      ),
-      'setRTCRoomEventHandler',
-    );
-
-    await _check(
-      room.joinRoom(
-        token: configuration.token,
-        userInfo: UserInfo(extraInfo: '', userId: configuration.userID),
-        userVisibility: true,
-        roomConfig: RoomConfig(
-          profile: RoomProfile.communication,
-          streamId: configuration.userID,
-          isPublishAudio: false,
-          isPublishVideo: false,
-          isAutoSubscribeAudio: false,
-          isAutoSubscribeVideo: true,
-        ),
-      ),
-      'joinRoom',
-    );
-
     try {
-      // VolcEngine reports join completion through the room event handler.
-      await completer.future.timeout(
+      // Bound the complete native operation, not only the event callback. A
+      // stalled platform-channel call must not leave the public Future pending.
+      await (() async {
+        await _check(
+          room.setRTCRoomEventHandler(
+            _makeRoomEventHandler(room: room, joinCompleter: completer),
+          ),
+          'setRTCRoomEventHandler',
+        );
+
+        await _check(
+          room.joinRoom(
+            token: configuration.token,
+            userInfo: UserInfo(extraInfo: '', userId: configuration.userID),
+            userVisibility: true,
+            roomConfig: RoomConfig(
+              profile: RoomProfile.communication,
+              streamId: configuration.userID,
+              isPublishAudio: false,
+              isPublishVideo: false,
+              isAutoSubscribeAudio: false,
+              isAutoSubscribeVideo: true,
+            ),
+          ),
+          'joinRoom',
+        );
+
+        // VolcEngine reports join completion through the room event handler.
+        await completer.future;
+      })().timeout(
         joinTimeout,
         onTimeout: () => throw const XmaxError(
           code: XmaxErrorCode.timeout,
@@ -191,7 +197,9 @@ final class RtcManager implements RtcManaging {
         ),
       );
     } catch (_) {
-      await leaveRoom();
+      try {
+        await leaveRoom();
+      } catch (_) {}
       rethrow;
     }
   }
@@ -209,10 +217,21 @@ final class RtcManager implements RtcManaging {
       return;
     }
 
+    Object? cleanupError;
     try {
-      await room.leaveRoom();
-    } finally {
-      await room.destroy();
+      await room.leaveRoom().timeout(cleanupTimeout);
+    } catch (error) {
+      cleanupError = error;
+    }
+
+    try {
+      await room.destroy().timeout(cleanupTimeout);
+    } catch (error) {
+      cleanupError ??= error;
+    }
+
+    if (cleanupError != null) {
+      throw XmaxError.from(cleanupError);
     }
   }
 
@@ -271,7 +290,31 @@ final class RtcManager implements RtcManaging {
 
   @override
   Future<void> sendRoomMessage(String message) async {
-    await _check(_requiredRoom.sendRoomMessage(message), 'sendRoomMessage');
+    final room = _requiredRoom;
+
+    if (Platform.isAndroid) {
+      // volc_engine_rtc 3.60.6 declares this result as int, while its Android
+      // bridge serializes the native long message ID as a String. Calling the
+      // generated wrapper therefore sends the message and then throws a cast
+      // error. Invoke the same native method directly until the plugin fixes
+      // its generated return type.
+      final dynamic platformRoom = room.$instance;
+      final Object? result = await platformRoom.nativeCall<Object?>(
+        'sendRoomMessage',
+        <Object?>[message],
+      );
+      final status = int.tryParse(result?.toString() ?? '');
+
+      if (status != null && status < 0) {
+        throw XmaxError(
+          code: XmaxErrorCode.rtcError,
+          message: 'RTC sendRoomMessage failed: $status',
+        );
+      }
+      return;
+    }
+
+    await _check(room.sendRoomMessage(message), 'sendRoomMessage');
   }
 
   @override
@@ -354,23 +397,26 @@ final class RtcManager implements RtcManaging {
     required RTCRoom room,
     required Completer<void> joinCompleter,
   }) => IRTCRoomEventHandler(
-    onRoomStateChanged: (roomID, _, state, _) {
-      if (!identical(_room, room) ||
-          roomID != _roomID ||
-          joinCompleter.isCompleted) {
-        return;
-      }
-
-      if (state == 0) {
-        joinCompleter.complete();
-      } else {
-        joinCompleter.completeError(
-          XmaxError(
-            code: XmaxErrorCode.rtcError,
-            message: 'RTC join room failed: $state',
-          ),
-        );
-      }
+    // VolcEngine 3.60 uses this callback on current Android releases. Keep the
+    // deprecated callback below as a fallback for iOS and older native SDKs.
+    onRoomStateChangedWithReason: (roomID, _, state, reason) {
+      _completeRoomJoin(
+        room: room,
+        joinCompleter: joinCompleter,
+        roomID: roomID,
+        // The plugin exposes this callback but does not re-export RoomState.
+        joined: state.name == 'success',
+        failureReason: reason.name,
+      );
+    },
+    onRoomStateChanged: (roomID, _, state, extraInfo) {
+      _completeRoomJoin(
+        room: room,
+        joinCompleter: joinCompleter,
+        roomID: roomID,
+        joined: state == 0,
+        failureReason: extraInfo.trim().isEmpty ? '$state' : extraInfo,
+      );
     },
     onUserPublishStreamVideo: (streamID, info, published) {
       _remoteStreamIDs[info.userId] = streamID;
@@ -397,6 +443,32 @@ final class RtcManager implements RtcManaging {
       );
     },
   );
+
+  void _completeRoomJoin({
+    required RTCRoom room,
+    required Completer<void> joinCompleter,
+    required String roomID,
+    required bool joined,
+    required String failureReason,
+  }) {
+    if (!identical(_room, room) ||
+        roomID != _roomID ||
+        joinCompleter.isCompleted) {
+      return;
+    }
+
+    if (joined) {
+      joinCompleter.complete();
+      return;
+    }
+
+    joinCompleter.completeError(
+      XmaxError(
+        code: XmaxErrorCode.rtcError,
+        message: 'RTC join room failed: $failureReason',
+      ),
+    );
+  }
 
   RemoteStream _remoteStream(String streamID, StreamInfo info) => RemoteStream(
     roomID: info.roomId,
