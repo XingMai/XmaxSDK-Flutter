@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import '../../foundation/logging/XmaxLogger.dart';
 import '../../foundation/rtc/RtcManaging.dart';
 import 'RoomEvent.dart';
 
@@ -27,7 +28,15 @@ final class RoomHeartbeat {
             await _rtcManager.sendRoomMessage(
               RoomEvent.heartbeat(userID: userID),
             );
-          } catch (_) {}
+          } catch (error) {
+            if (version == _version) {
+              XmaxLogger.error(
+                '发送 RTC 房间心跳失败 (Failed to Send RTC Room Heartbeat)\n'
+                '└─ 原因：$error',
+                category: 'Room',
+              );
+            }
+          }
         }());
       }
     });

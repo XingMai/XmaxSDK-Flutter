@@ -1,4 +1,5 @@
 import '../../foundation/errors/XmaxError.dart';
+import '../../foundation/logging/XmaxLogger.dart';
 import '../../media/interaction/InteractionControlling.dart';
 import '../../render/RenderControlling.dart';
 import '../../service/realtime/RealtimeMediaStream.dart';
@@ -96,9 +97,7 @@ final class XmaxRealtimeConnectionManager {
       }
 
       if (session != null) {
-        try {
-          await _sessionService.closeSession(sessionID: session.id);
-        } catch (_) {}
+        await _closeSessionAfterFailedConnection(session.id);
       }
 
       if (!isCurrent()) {
@@ -120,7 +119,7 @@ final class XmaxRealtimeConnectionManager {
     _activeRemoteTrack = null;
 
     _sessionService.stopHeartbeat();
-    _renderController.resetRemoteTrack(track);
+    _resetRemoteRendering(track);
     await _streamController.disconnect();
 
     if (session != null) {
@@ -137,8 +136,35 @@ final class XmaxRealtimeConnectionManager {
     _activeRemoteTrack = null;
 
     _sessionService.stopHeartbeat();
-    _renderController.resetRemoteTrack(track);
+    _resetRemoteRendering(track);
     await _streamController.disconnect();
+  }
+
+  void _resetRemoteRendering(RealtimeVideoTrack? track) {
+    try {
+      _renderController.resetRemoteTrack(track);
+    } catch (error) {
+      _logCleanupFailure(
+        '重置远端视频渲染失败 (Failed to Reset Remote Video Rendering)',
+        error,
+      );
+    }
+  }
+
+  Future<void> _closeSessionAfterFailedConnection(String sessionID) async {
+    try {
+      await _sessionService.closeSession(sessionID: sessionID);
+    } catch (error) {
+      _logCleanupFailure(
+        '连接回滚关闭会话失败 '
+        '(Failed to Close Session During Connection Rollback)',
+        error,
+      );
+    }
+  }
+
+  static void _logCleanupFailure(String title, Object error) {
+    XmaxLogger.error('$title\n└─ 原因：$error', category: 'Realtime');
   }
 
   static void _ensureCurrent(bool Function() isCurrent) {

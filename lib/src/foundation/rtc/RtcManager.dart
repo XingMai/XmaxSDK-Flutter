@@ -13,6 +13,7 @@ import 'RtcEngineManager.dart';
 import 'RtcEventListener.dart';
 import 'RtcManaging.dart';
 import 'RtcModels.dart';
+import 'RtcStatsLogger.dart';
 
 final class RtcManager implements RtcManaging {
   RtcManager({RtcEngineManager? engineManager})
@@ -363,7 +364,9 @@ final class RtcManager implements RtcManaging {
         message,
       );
     },
+    onSysStats: RtcStatsLogger.logSystemStats,
     onPerformanceAlarms: (_, _, _, reason, data) {
+      RtcStatsLogger.logPerformanceAlarm(reason, data);
       final reasonName = reason.name.toLowerCase();
 
       // Only fallback/resume alarms represent a quality state transition.
@@ -427,7 +430,14 @@ final class RtcManager implements RtcManaging {
         published,
       );
     },
+    onLocalStreamStats: (_, _, stats) {
+      RtcStatsLogger.logLocalStreamStats(stats);
+    },
+    onRemoteStreamStats: (_, _, stats) {
+      RtcStatsLogger.logRemoteStreamStats(stats);
+    },
     onNetworkQuality: (local, remote) {
+      RtcStatsLogger.logNetworkQuality(local, remote);
       // Report the worst remote downlink when the SDK supplies multiple users.
       var downlink = RealtimeNetworkQualityLevel.unknown;
       for (final item in remote) {

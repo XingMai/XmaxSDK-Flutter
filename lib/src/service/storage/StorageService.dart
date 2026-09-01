@@ -3,6 +3,7 @@ import 'dart:math';
 import 'dart:typed_data';
 
 import '../../foundation/errors/XmaxError.dart';
+import '../../foundation/logging/XmaxLogger.dart';
 import '../../foundation/storage/StorageManaging.dart';
 import '../../foundation/storage/StorageModels.dart';
 import '../network/ApiServicing.dart';
@@ -151,12 +152,22 @@ final class StorageService implements StorageServicing {
     required bool checksSafety,
     StorageProgressListener? progress,
   }) async {
+    final startedAt = DateTime.now();
     try {
       final safeName = _validateUpload(
         source: source,
         fileName: fileName,
         contentType: contentType,
         mediaType: mediaType,
+      );
+      final byteCount = _sourceByteCount(source);
+      XmaxLogger.info(
+        '开始上传 (Upload Started)\n'
+        '├─ 类型：${mediaType.value}\n'
+        '├─ 分辨率：--\n'
+        '├─ 大小：${_formatByteCount(byteCount)}\n'
+        '└─ 安全检测：$checksSafety',
+        category: 'Storage',
       );
 
       final temporary = await _fetchStorageConfiguration();
@@ -170,25 +181,72 @@ final class StorageService implements StorageServicing {
         progress: progress,
       );
 
-      if (!checksSafety) {
-        return stored;
+      final StoredFile result;
+      if (checksSafety) {
+        // Safety checking happens after COS upload because the API checks a URL.
+        final checkedURL = await _checkImage(stored.url);
+        result = StoredFile(
+          url: checkedURL,
+          objectKey: stored.objectKey,
+          etag: stored.etag,
+        );
+      } else {
+        result = stored;
       }
 
-      // Safety checking happens after COS upload because the API checks a URL.
-      final checkedURL = await _checkImage(stored.url);
-      return StoredFile(
-        url: checkedURL,
-        objectKey: stored.objectKey,
-        etag: stored.etag,
+      XmaxLogger.info(
+        '上传完成 (Upload Completed)\n'
+        '├─ 地址：${result.url}\n'
+        '└─ 耗时：${_formatDuration(startedAt)}',
+        category: 'Storage',
       );
-    } on XmaxError {
+      return result;
+    } on XmaxError catch (error) {
+      _logUploadFailure(error, startedAt);
       rethrow;
     } catch (error) {
-      throw XmaxError(
+      final uploadError = XmaxError(
         code: XmaxErrorCode.uploadError,
         message: error.toString(),
       );
+      _logUploadFailure(uploadError, startedAt);
+      throw uploadError;
     }
+  }
+
+  static int _sourceByteCount(StorageUploadSource source) => switch (source) {
+    StorageDataUploadSource(:final data) => data.length,
+    StorageFileUploadSource(:final fileURL) => File(
+      fileURL.toFilePath(),
+    ).lengthSync(),
+  };
+
+  static String _formatByteCount(int byteCount) {
+    final count = byteCount.toDouble();
+    if (byteCount < 1024) return '$byteCount B';
+    if (byteCount < 1024 * 1024) {
+      return '${(count / 1024).toStringAsFixed(1)} KB';
+    }
+    if (byteCount < 1024 * 1024 * 1024) {
+      return '${(count / (1024 * 1024)).toStringAsFixed(2)} MB';
+    }
+    return '${(count / (1024 * 1024 * 1024)).toStringAsFixed(2)} GB';
+  }
+
+  static String _formatDuration(DateTime startedAt) {
+    final milliseconds = DateTime.now().difference(startedAt).inMilliseconds;
+    if (milliseconds < 1000) return '$milliseconds ms';
+    return '${(milliseconds / 1000).toStringAsFixed(2)} s';
+  }
+
+  static void _logUploadFailure(XmaxError error, DateTime startedAt) {
+    XmaxLogger.error(
+      '上传失败 (Upload Failed)\n'
+      '├─ 错误码：${error.code.value}\n'
+      '├─ 原因：${error.message}\n'
+      '└─ 耗时：${_formatDuration(startedAt)}',
+      category: 'Storage',
+    );
   }
 
   Future<DownloadedFile> _download({

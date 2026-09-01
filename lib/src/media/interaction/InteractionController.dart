@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/widgets.dart';
 
+import '../../foundation/logging/XmaxLogger.dart';
 import '../../service/realtime/RealtimePoint.dart';
 import '../../service/realtime/RealtimeVideoFormat.dart';
 import 'InteractionControlling.dart';
@@ -80,7 +81,14 @@ final class InteractionController implements InteractionControlling {
 
         try {
           await _listener(taskID, points);
-        } catch (_) {}
+        } catch (error) {
+          XmaxLogger.warn(
+            '发送交互轨迹失败，已丢弃当前采样帧 '
+            '(Failed to Send Interaction Trajectory; Current Sample Dropped)\n'
+            '└─ 原因：$error',
+            category: 'Interaction',
+          );
+        }
       }
     } finally {
       _draining = false;

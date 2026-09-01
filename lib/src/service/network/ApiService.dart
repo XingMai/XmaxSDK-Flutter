@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import '../../foundation/errors/XmaxError.dart';
-import '../../foundation/logging/XmaxLogger.dart';
+import 'ApiLogger.dart';
 import 'ApiServicing.dart';
 
 final class ApiTransportResponse {
@@ -102,13 +102,31 @@ final class ApiService implements ApiServicing {
         timeout: _timeout,
       );
     } on TimeoutException catch (error) {
+      ApiLogger.logFailure(
+        method: method,
+        path: path,
+        error: error,
+        durationMs: stopwatch.elapsedMilliseconds,
+      );
       throw XmaxError(
         code: XmaxErrorCode.networkError,
         message: 'HTTP request failed: $error',
       );
-    } on XmaxError {
+    } on XmaxError catch (error) {
+      ApiLogger.logFailure(
+        method: method,
+        path: path,
+        error: error,
+        durationMs: stopwatch.elapsedMilliseconds,
+      );
       rethrow;
     } catch (error) {
+      ApiLogger.logFailure(
+        method: method,
+        path: path,
+        error: error,
+        durationMs: stopwatch.elapsedMilliseconds,
+      );
       throw XmaxError(
         code: XmaxErrorCode.networkError,
         message: 'HTTP request failed: $error',
@@ -118,15 +136,34 @@ final class ApiService implements ApiServicing {
     try {
       final value = _parseResponse(response, decode);
 
-      XmaxLogger.debug(
-        '${method.value} $path ${response.statusCode} '
-        '${stopwatch.elapsedMilliseconds}ms',
-        category: 'API',
+      ApiLogger.logResponse(
+        method: method,
+        path: path,
+        statusCode: response.statusCode,
+        bodyByteCount: response.body.length,
+        durationMs: stopwatch.elapsedMilliseconds,
+        successful: true,
       );
       return value;
     } on XmaxError {
+      ApiLogger.logResponse(
+        method: method,
+        path: path,
+        statusCode: response.statusCode,
+        bodyByteCount: response.body.length,
+        durationMs: stopwatch.elapsedMilliseconds,
+        successful: false,
+      );
       rethrow;
     } catch (error) {
+      ApiLogger.logResponse(
+        method: method,
+        path: path,
+        statusCode: response.statusCode,
+        bodyByteCount: response.body.length,
+        durationMs: stopwatch.elapsedMilliseconds,
+        successful: false,
+      );
       throw XmaxError(
         code: XmaxErrorCode.apiError,
         message: error.toString(),

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import '../foundation/errors/XmaxError.dart';
+import '../foundation/logging/XmaxLogger.dart';
 import '../foundation/rtc/RtcEventListener.dart';
 import '../foundation/rtc/RtcManaging.dart';
 import '../foundation/rtc/RtcModels.dart';
@@ -130,6 +131,7 @@ final class StreamController implements StreamControlling {
 
     for (final streamID in _remoteAudioSubscriptions.toList()) {
       await _safe(
+        '取消订阅 RTC 远端音频失败 (Failed to Unsubscribe from RTC Remote Audio)',
         () => _rtcManager.subscribeRemoteAudio(
           streamID: streamID,
           subscribe: false,
@@ -139,6 +141,7 @@ final class StreamController implements StreamControlling {
 
     for (final streamID in _remoteVideoSubscriptions.toList()) {
       await _safe(
+        '取消订阅 RTC 远端视频失败 (Failed to Unsubscribe from RTC Remote Video)',
         () => _rtcManager.subscribeRemoteVideo(
           streamID: streamID,
           subscribe: false,
@@ -147,7 +150,10 @@ final class StreamController implements StreamControlling {
     }
 
     if (_localVideoPublished) {
-      await _safe(() => _rtcManager.publishLocalVideo(publish: false));
+      await _safe(
+        '取消发布 RTC 本地视频失败 (Failed to Unpublish RTC Local Video)',
+        () => _rtcManager.publishLocalVideo(publish: false),
+      );
     }
 
     _remoteAudioSubscriptions.clear();
@@ -286,7 +292,7 @@ final class StreamController implements StreamControlling {
       _remoteVideoSubscriptions.remove(stream.streamID);
       if (_activeRemoteStream?.streamID == stream.streamID) {
         _activeRemoteStream = null;
-        _remoteStreamListener?.call(null);
+        _clearRemoteStream();
       }
     }
   }
@@ -311,7 +317,17 @@ final class StreamController implements StreamControlling {
       return;
     }
 
-    final message = utf8.decode(bytes, allowMalformed: true).trim();
+    final String message;
+    try {
+      message = utf8.decode(bytes).trim();
+    } on FormatException {
+      XmaxLogger.warn(
+        '收到无法解码的 RTC SEI 消息 '
+        '(Failed to Decode Incoming RTC SEI Message)',
+        category: 'RTC',
+      );
+      return;
+    }
     if (message != taskID || !_isExpectedRemote(stream)) {
       return;
     }
@@ -367,6 +383,7 @@ final class StreamController implements StreamControlling {
 
     for (final streamID in _remoteAudioSubscriptions.toList()) {
       await _safe(
+        '取消订阅 RTC 远端音频失败 (Failed to Unsubscribe from RTC Remote Audio)',
         () => _rtcManager.subscribeRemoteAudio(
           streamID: streamID,
           subscribe: false,
@@ -377,13 +394,28 @@ final class StreamController implements StreamControlling {
     _remoteAudioSubscriptions.clear();
 
     if (notifyRemote) {
-      _remoteStreamListener?.call(null);
+      _clearRemoteStream();
     }
   }
 
-  Future<void> _safe(Future<void> Function() operation) async {
+  void _clearRemoteStream() {
+    try {
+      _remoteStreamListener?.call(null);
+    } catch (error) {
+      XmaxLogger.error(
+        '清理 RTC 远端生成流失败 '
+        '(Failed to Clean Up RTC Remote Generation Stream)\n'
+        '└─ 原因：$error',
+        category: 'Stream',
+      );
+    }
+  }
+
+  Future<void> _safe(String title, Future<void> Function() operation) async {
     try {
       await operation();
-    } catch (_) {}
+    } catch (error) {
+      XmaxLogger.error('$title\n└─ 原因：$error', category: 'Stream');
+    }
   }
 }

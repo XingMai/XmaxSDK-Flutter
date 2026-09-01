@@ -1,4 +1,7 @@
+import 'dart:convert';
+
 import '../../foundation/errors/XmaxError.dart';
+import '../../foundation/logging/XmaxLogger.dart';
 import '../../foundation/rtc/RtcManaging.dart';
 import '../../foundation/rtc/RtcModels.dart';
 import '../../service/realtime/RealtimeContext.dart';
@@ -72,7 +75,7 @@ final class RoomController implements RoomControlling {
     required String taskID,
     required RealtimeVideoFormat videoFormat,
     required RealtimeContext context,
-  }) => _rtcManager.sendRoomMessage(
+  }) => _send(
     RoomEvent.start(
       userID: _requireUserID(),
       taskID: taskID,
@@ -86,7 +89,7 @@ final class RoomController implements RoomControlling {
     required String taskID,
     required RealtimeVideoFormat videoFormat,
     required RealtimeContext context,
-  }) => _rtcManager.sendRoomMessage(
+  }) => _send(
     RoomEvent.changeCondition(
       userID: _requireUserID(),
       taskID: taskID,
@@ -102,9 +105,7 @@ final class RoomController implements RoomControlling {
       return;
     }
 
-    await _rtcManager.sendRoomMessage(
-      RoomEvent.stop(userID: userID, taskID: taskID),
-    );
+    await _send(RoomEvent.stop(userID: userID, taskID: taskID));
   }
 
   @override
@@ -116,7 +117,7 @@ final class RoomController implements RoomControlling {
       return;
     }
 
-    await _rtcManager.sendRoomMessage(
+    await _send(
       RoomEvent.tracks(
         userID: _requireUserID(),
         taskID: taskID,
@@ -135,5 +136,45 @@ final class RoomController implements RoomControlling {
     }
 
     return userID;
+  }
+
+  Future<void> _send(String message) async {
+    await _rtcManager.sendRoomMessage(message);
+    XmaxLogger.debug(_formatSignalLog(message), category: 'Room');
+  }
+
+  static String _formatSignalLog(String message) {
+    try {
+      final object = jsonDecode(message);
+      if (object is! Map<String, dynamic>) {
+        throw const FormatException();
+      }
+      final eventType = object['event'] is String
+          ? object['event'] as String
+          : 'unknown';
+      final formatted = const JsonEncoder.withIndent(
+        '  ',
+      ).convert(_sortJson(object));
+      final indented = formatted.replaceAll('\n', '\n   ');
+      return '发送房间信令 (Outbound Room Signaling)\n'
+          '├─ 类型：$eventType\n'
+          '└─ 内容：\n'
+          '   $indented';
+    } catch (_) {
+      return '发送房间信令 (Outbound Room Signaling)\n└─ 内容：$message';
+    }
+  }
+
+  static Object? _sortJson(Object? value) {
+    if (value is Map) {
+      final keys = value.keys.map((key) => key.toString()).toList()..sort();
+      return <String, Object?>{
+        for (final key in keys) key: _sortJson(value[key]),
+      };
+    }
+    if (value is List) {
+      return value.map(_sortJson).toList(growable: false);
+    }
+    return value;
   }
 }

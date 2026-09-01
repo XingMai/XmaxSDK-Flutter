@@ -1,6 +1,7 @@
 import 'package:flutter/widgets.dart';
 
 import '../../foundation/errors/XmaxError.dart';
+import '../../foundation/logging/XmaxLogger.dart';
 import '../../foundation/permissions/PermissionManager.dart';
 import '../../foundation/permissions/PermissionManaging.dart';
 import '../../foundation/rtc/RtcManaging.dart';
@@ -73,7 +74,13 @@ final class CameraController {
       VideoRenderRegistry.unregister(track);
       try {
         await _rtcManager.stopVideoCapture();
-      } catch (_) {}
+      } catch (cleanupError) {
+        XmaxLogger.error(
+          '回滚 RTC 相机采集失败 (Failed to Roll Back RTC Camera Capture)\n'
+          '└─ 原因：$cleanupError',
+          category: 'Realtime',
+        );
+      }
       throw XmaxError.from(error);
     }
   }
