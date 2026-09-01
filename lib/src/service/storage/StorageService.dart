@@ -162,12 +162,13 @@ final class StorageService implements StorageServicing {
       );
       final byteCount = _sourceByteCount(source);
       XmaxLogger.info(
-        '开始上传 (Upload Started)\n'
-        '├─ 类型：${mediaType.value}\n'
-        '├─ 分辨率：--\n'
-        '├─ 大小：${_formatByteCount(byteCount)}\n'
-        '└─ 安全检测：$checksSafety',
-        category: 'Storage',
+        category: XmaxLoggerCategory.storage,
+        message:
+            '开始上传 (Upload Started)\n'
+            '├─ 类型：${mediaType.value}\n'
+            '├─ 分辨率：--\n'
+            '├─ 大小：${_formatByteCount(byteCount)}\n'
+            '└─ 安全检测：$checksSafety',
       );
 
       final temporary = await _fetchStorageConfiguration();
@@ -195,10 +196,11 @@ final class StorageService implements StorageServicing {
       }
 
       XmaxLogger.info(
-        '上传完成 (Upload Completed)\n'
-        '├─ 地址：${result.url}\n'
-        '└─ 耗时：${_formatDuration(startedAt)}',
-        category: 'Storage',
+        category: XmaxLoggerCategory.storage,
+        message:
+            '上传完成 (Upload Completed)\n'
+            '├─ 地址：${result.url}\n'
+            '└─ 耗时：${_formatDuration(startedAt)}',
       );
       return result;
     } on XmaxError catch (error) {
@@ -241,11 +243,12 @@ final class StorageService implements StorageServicing {
 
   static void _logUploadFailure(XmaxError error, DateTime startedAt) {
     XmaxLogger.error(
-      '上传失败 (Upload Failed)\n'
-      '├─ 错误码：${error.code.value}\n'
-      '├─ 原因：${error.message}\n'
-      '└─ 耗时：${_formatDuration(startedAt)}',
-      category: 'Storage',
+      category: XmaxLoggerCategory.storage,
+      message:
+          '上传失败 (Upload Failed)\n'
+          '├─ 错误码：${error.code.value}\n'
+          '├─ 原因：${error.message}\n'
+          '└─ 耗时：${_formatDuration(startedAt)}',
     );
   }
 

@@ -83,10 +83,11 @@ final class InteractionController implements InteractionControlling {
           await _listener(taskID, points);
         } catch (error) {
           XmaxLogger.warn(
-            '发送交互轨迹失败，已丢弃当前采样帧 '
-            '(Failed to Send Interaction Trajectory; Current Sample Dropped)\n'
-            '└─ 原因：$error',
-            category: 'Interaction',
+            category: XmaxLoggerCategory.interaction,
+            message:
+                '发送交互轨迹失败，已丢弃当前采样帧 '
+                '(Failed to Send Interaction Trajectory; Current Sample Dropped)\n'
+                '└─ 原因：$error',
           );
         }
       }

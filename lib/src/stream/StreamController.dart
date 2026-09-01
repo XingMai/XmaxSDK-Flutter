@@ -322,9 +322,10 @@ final class StreamController implements StreamControlling {
       message = utf8.decode(bytes).trim();
     } on FormatException {
       XmaxLogger.warn(
-        '收到无法解码的 RTC SEI 消息 '
-        '(Failed to Decode Incoming RTC SEI Message)',
-        category: 'RTC',
+        category: XmaxLoggerCategory.rtc,
+        message:
+            '收到无法解码的 RTC SEI 消息 '
+            '(Failed to Decode Incoming RTC SEI Message)',
       );
       return;
     }
@@ -403,10 +404,11 @@ final class StreamController implements StreamControlling {
       _remoteStreamListener?.call(null);
     } catch (error) {
       XmaxLogger.error(
-        '清理 RTC 远端生成流失败 '
-        '(Failed to Clean Up RTC Remote Generation Stream)\n'
-        '└─ 原因：$error',
-        category: 'Stream',
+        category: XmaxLoggerCategory.stream,
+        message:
+            '清理 RTC 远端生成流失败 '
+            '(Failed to Clean Up RTC Remote Generation Stream)\n'
+            '└─ 原因：$error',
       );
     }
   }
@@ -415,7 +417,10 @@ final class StreamController implements StreamControlling {
     try {
       await operation();
     } catch (error) {
-      XmaxLogger.error('$title\n└─ 原因：$error', category: 'Stream');
+      XmaxLogger.error(
+        category: XmaxLoggerCategory.stream,
+        message: '$title\n└─ 原因：$error',
+      );
     }
   }
 }

@@ -14,56 +14,56 @@ abstract final class XmaxLogger {
 
   static bool isEnabled(XmaxLoggerOption option) => _options.contains(option);
 
-  static void debug(
-    String message, {
-    String? category,
+  static void debug({
+    XmaxLoggerCategory? category,
+    required String message,
     XmaxLoggerOption option = XmaxLoggerOption.business,
   }) {
     _write(XmaxLogLevel.debug, message, category: category, option: option);
   }
 
-  static void info(
-    String message, {
-    String? category,
+  static void info({
+    XmaxLoggerCategory? category,
+    required String message,
     XmaxLoggerOption option = XmaxLoggerOption.business,
   }) {
     _write(XmaxLogLevel.info, message, category: category, option: option);
   }
 
-  static void warn(
-    String message, {
-    String? category,
+  static void warn({
+    XmaxLoggerCategory? category,
+    required String message,
     XmaxLoggerOption option = XmaxLoggerOption.business,
   }) {
     _write(XmaxLogLevel.warning, message, category: category, option: option);
   }
 
-  static void error(
-    String message, {
-    String? category,
+  static void error({
+    XmaxLoggerCategory? category,
+    required String message,
     XmaxLoggerOption option = XmaxLoggerOption.business,
   }) {
     _write(XmaxLogLevel.error, message, category: category, option: option);
   }
 
-  static String formattedMessage(String message, {String? category}) {
-    final normalizedCategory = category?.trim();
-    final prefix = normalizedCategory == null || normalizedCategory.isEmpty
-        ? '[Xmax]'
-        : '[Xmax][$normalizedCategory]';
+  static String formattedMessage({
+    XmaxLoggerCategory? category,
+    required String message,
+  }) {
+    final prefix = category == null ? '[Xmax]' : '[Xmax][${category.value}]';
     return message.split('\n').map((line) => '$prefix $line').join('\n');
   }
 
   static void _write(
     XmaxLogLevel level,
     String message, {
-    required String? category,
+    required XmaxLoggerCategory? category,
     required XmaxLoggerOption option,
   }) {
     if (!isEnabled(option)) {
       return;
     }
-    _sink(level, formattedMessage(message, category: category));
+    _sink(level, formattedMessage(category: category, message: message));
   }
 
   static void _defaultSink(XmaxLogLevel level, String message) {
@@ -80,6 +80,23 @@ abstract final class XmaxLogger {
     _options = const XmaxLoggerOption(rawValue: 0);
     _sink = _defaultSink;
   }
+}
+
+enum XmaxLoggerCategory {
+  api('API'),
+  rtc('RTC'),
+  room('Room'),
+  stream('Stream'),
+  storage('Storage'),
+  realtime('Realtime'),
+  media('Media'),
+  render('Render'),
+  permission('Permission'),
+  interaction('Interaction');
+
+  const XmaxLoggerCategory(this.value);
+
+  final String value;
 }
 
 enum XmaxLogLevel {

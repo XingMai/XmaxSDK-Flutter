@@ -76,9 +76,10 @@ final class CameraController {
         await _rtcManager.stopVideoCapture();
       } catch (cleanupError) {
         XmaxLogger.error(
-          '回滚 RTC 相机采集失败 (Failed to Roll Back RTC Camera Capture)\n'
-          '└─ 原因：$cleanupError',
-          category: 'Realtime',
+          category: XmaxLoggerCategory.realtime,
+          message:
+              '回滚 RTC 相机采集失败 (Failed to Roll Back RTC Camera Capture)\n'
+              '└─ 原因：$cleanupError',
         );
       }
       throw XmaxError.from(error);

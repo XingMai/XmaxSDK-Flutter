@@ -140,7 +140,10 @@ final class RoomController implements RoomControlling {
 
   Future<void> _send(String message) async {
     await _rtcManager.sendRoomMessage(message);
-    XmaxLogger.debug(_formatSignalLog(message), category: 'Room');
+    XmaxLogger.debug(
+      category: XmaxLoggerCategory.room,
+      message: _formatSignalLog(message),
+    );
   }
 
   static String _formatSignalLog(String message) {

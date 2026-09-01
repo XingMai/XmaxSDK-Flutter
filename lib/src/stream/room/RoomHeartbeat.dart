@@ -31,9 +31,10 @@ final class RoomHeartbeat {
           } catch (error) {
             if (version == _version) {
               XmaxLogger.error(
-                '发送 RTC 房间心跳失败 (Failed to Send RTC Room Heartbeat)\n'
-                '└─ 原因：$error',
-                category: 'Room',
+                category: XmaxLoggerCategory.room,
+                message:
+                    '发送 RTC 房间心跳失败 (Failed to Send RTC Room Heartbeat)\n'
+                    '└─ 原因：$error',
               );
             }
           }

@@ -17,8 +17,8 @@ final class PermissionManager implements PermissionManaging {
       }
     } catch (error) {
       XmaxLogger.error(
-        '权限申请失败 (Permission Request Failed)\n└─ 原因：$error',
-        category: 'Permission',
+        category: XmaxLoggerCategory.permission,
+        message: '权限申请失败 (Permission Request Failed)\n└─ 原因：$error',
       );
       throw const XmaxError(
         code: XmaxErrorCode.cameraPermissionDenied,

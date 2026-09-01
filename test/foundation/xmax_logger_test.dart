@@ -17,17 +17,17 @@ void main() {
 
   test('formattedMessage prefixes every line with category', () {
     expect(
-      XmaxLogger.formattedMessage('Line 1\nLine 2', category: ' RTC '),
+      XmaxLogger.formattedMessage(
+        category: XmaxLoggerCategory.rtc,
+        message: 'Line 1\nLine 2',
+      ),
       '[Xmax][RTC] Line 1\n[Xmax][RTC] Line 2',
     );
-    expect(
-      XmaxLogger.formattedMessage('Ready', category: '  '),
-      '[Xmax] Ready',
-    );
+    expect(XmaxLogger.formattedMessage(message: 'Ready'), '[Xmax] Ready');
   });
 
   test('logging is disabled by default', () {
-    XmaxLogger.error('Hidden', category: 'API');
+    XmaxLogger.error(category: XmaxLoggerCategory.api, message: 'Hidden');
 
     expect(records, isEmpty);
   });
@@ -35,10 +35,10 @@ void main() {
   test('business and performance options filter independently', () {
     XmaxLogger.configure(options: XmaxLoggerOption.business);
 
-    XmaxLogger.info('Business', category: 'Room');
+    XmaxLogger.info(category: XmaxLoggerCategory.room, message: 'Business');
     XmaxLogger.debug(
-      'Performance',
-      category: 'RTC',
+      category: XmaxLoggerCategory.rtc,
+      message: 'Performance',
       option: XmaxLoggerOption.performance,
     );
 
@@ -50,10 +50,10 @@ void main() {
   test('logger preserves all output levels', () {
     XmaxLogger.configure(options: XmaxLoggerOption.all);
 
-    XmaxLogger.debug('Debug');
-    XmaxLogger.info('Info');
-    XmaxLogger.warn('Warning');
-    XmaxLogger.error('Error');
+    XmaxLogger.debug(message: 'Debug');
+    XmaxLogger.info(message: 'Info');
+    XmaxLogger.warn(message: 'Warning');
+    XmaxLogger.error(message: 'Error');
 
     expect(records.map((record) => record.level), XmaxLogLevel.values);
   });

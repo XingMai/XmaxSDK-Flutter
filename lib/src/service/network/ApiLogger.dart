@@ -18,9 +18,9 @@ abstract final class ApiLogger {
       durationMs: durationMs,
     );
     if (successful) {
-      XmaxLogger.debug(message, category: 'API');
+      XmaxLogger.debug(category: XmaxLoggerCategory.api, message: message);
     } else {
-      XmaxLogger.error(message, category: 'API');
+      XmaxLogger.error(category: XmaxLoggerCategory.api, message: message);
     }
   }
 
@@ -31,10 +31,11 @@ abstract final class ApiLogger {
     required int durationMs,
   }) {
     XmaxLogger.error(
-      '${method.value} $path 失败 (Request Failed)\n'
-      '├─ 耗时：$durationMs ms\n'
-      '└─ 原因：${_errorMessage(error)}',
-      category: 'API',
+      category: XmaxLoggerCategory.api,
+      message:
+          '${method.value} $path 失败 (Request Failed)\n'
+          '├─ 耗时：$durationMs ms\n'
+          '└─ 原因：${_errorMessage(error)}',
     );
   }
 

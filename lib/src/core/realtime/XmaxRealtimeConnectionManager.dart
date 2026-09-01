@@ -164,7 +164,10 @@ final class XmaxRealtimeConnectionManager {
   }
 
   static void _logCleanupFailure(String title, Object error) {
-    XmaxLogger.error('$title\n└─ 原因：$error', category: 'Realtime');
+    XmaxLogger.error(
+      category: XmaxLoggerCategory.realtime,
+      message: '$title\n└─ 原因：$error',
+    );
   }
 
   static void _ensureCurrent(bool Function() isCurrent) {
