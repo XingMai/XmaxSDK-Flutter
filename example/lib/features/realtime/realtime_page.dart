@@ -157,15 +157,21 @@ class _RealtimePageState extends State<RealtimePage>
     try {
       final generating =
           _state.connectionState == RealtimeConnectionState.generating;
-      final remote = await _manager.startGeneration(
-        localStream: generating ? null : localStream,
-        context: context,
-      );
+
+      if (!generating &&
+          _state.connectionState != RealtimeConnectionState.connected) {
+        final remote = await _manager.connect(localStream: localStream);
+        if (!mounted) return;
+
+        // Mount the remote renderer before asking the bot to publish frames.
+        // This avoids creating an Android platform view during decoder startup.
+        setState(() => _remoteStream = remote);
+        await WidgetsBinding.instance.endOfFrame;
+      }
+
+      await _manager.startGeneration(context: context);
       if (mounted) {
-        setState(() {
-          if (remote != null) _remoteStream = remote;
-          _isLoading = false;
-        });
+        setState(() => _isLoading = false);
       }
     } catch (error) {
       _showError(error);

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:volc_engine_rtc/volc_engine_rtc.dart';
 
@@ -124,6 +125,14 @@ final class _XmaxVideoViewState extends State<XmaxVideoView> {
       );
     } else {
       return const ColoredBox(color: Colors.black);
+    }
+
+    // The VolcEngine plugin defaults to SurfaceView even though its Flutter
+    // documentation recommends TextureView on Android. A SurfaceView nested in
+    // Flutter's virtual display can exhaust the ImageReader buffer queue while
+    // the remote decoder starts, which blocks the Android main thread.
+    if (defaultTargetPlatform == TargetPlatform.android) {
+      viewContext.viewType = 'texture';
     }
 
     return RTCSurfaceView(

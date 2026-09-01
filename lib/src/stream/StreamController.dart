@@ -270,6 +270,11 @@ final class StreamController implements StreamControlling {
     }
 
     if (published) {
+      // Bind the renderer before subscribing. On Android this gives Flutter a
+      // frame to create the platform view before decoded frames begin arriving.
+      _activeRemoteStream = stream;
+      _remoteStreamListener?.call(stream);
+
       if (_remoteVideoSubscriptions.add(stream.streamID)) {
         unawaited(_subscribeRemoteVideo(stream));
       }
@@ -307,9 +312,13 @@ final class StreamController implements StreamControlling {
       return;
     }
 
-    // A matching SEI binds the RTC stream to the pending generation task.
-    _activeRemoteStream = stream;
-    _remoteStreamListener?.call(stream);
+    // A matching SEI acknowledges the pending generation task. The renderer is
+    // already bound from the publish event so decoder startup cannot race view
+    // creation on Android.
+    if (_activeRemoteStream?.key != stream.key) {
+      _activeRemoteStream = stream;
+      _remoteStreamListener?.call(stream);
+    }
     _generationTimer?.cancel();
     _generationTimer = null;
     _generationCompleter = null;
