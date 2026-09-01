@@ -9,6 +9,12 @@ import '../errors/XmaxError.dart';
 import 'StorageManaging.dart';
 import 'StorageModels.dart';
 
+// The iOS SDK uploads objects with QCloudPutObjectRequest, which always uses a
+// single PUT request. Keep the transfer-manager threshold above every possible
+// mobile file size so the Flutter iOS bridge follows the same path. Android
+// additionally honors forceSimpleUpload.
+const int _simpleUploadThreshold = 0x7FFFFFFFFFFFFFFF;
+
 /// 封装腾讯 COS 上传和 HTTP 文件下载能力。
 final class StorageManager implements StorageManaging {
   StorageManager({HttpClient? httpClient})
@@ -193,7 +199,7 @@ final class StorageManager implements StorageManaging {
     StorageConfiguration configuration,
   ) async {
     final key =
-        'xmax-${configuration.region}-'
+        'xmax-simple-${configuration.region}-'
         '${configuration.endpoint.hashCode}-${configuration.bucket.hashCode}';
     if (Cos().hasTransferManger(key)) {
       return Cos().getTransferManger(key);
@@ -208,7 +214,10 @@ final class StorageManager implements StorageManaging {
         host: endpoint?.host,
         port: endpoint?.hasPort == true ? endpoint?.port : null,
       ),
-      TransferConfig(),
+      TransferConfig(
+        forceSimpleUpload: true,
+        divisionForUpload: _simpleUploadThreshold,
+      ),
     );
   }
 
