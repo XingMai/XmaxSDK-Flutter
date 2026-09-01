@@ -150,7 +150,7 @@ void main() {
     );
 
     expect(previewOpacity.opacity, 1);
-    expect(submitOpacity.opacity, 0.2);
+    expect(submitOpacity.opacity, 0.5);
 
     await tester.tap(find.byKey(const ValueKey('prompt-reference-preview')));
     await tester.tap(find.byIcon(Icons.arrow_upward_rounded));

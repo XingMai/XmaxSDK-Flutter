@@ -264,7 +264,7 @@ final class XLabRealtimeControlPanel extends StatelessWidget {
                   ? null
                   : onPromptReference,
               child: promptReference == null
-                  ? const Icon(Icons.add, color: Colors.white, size: 16)
+                  ? const Icon(Icons.add, color: Colors.white, size: 18)
                   : _PromptReferencePreview(reference: promptReference!),
             ),
             const SizedBox(width: 8),
@@ -280,7 +280,7 @@ final class XLabRealtimeControlPanel extends StatelessWidget {
               child: const Icon(
                 Icons.arrow_upward_rounded,
                 color: Colors.white,
-                size: 14,
+                size: 18,
               ),
             ),
             const SizedBox(width: 8),
@@ -566,7 +566,7 @@ final class _CircleAction extends StatelessWidget {
     required this.onPressed,
     required this.child,
     this.backgroundColor = const Color(0xFF3A3A3C),
-    this.disabledOpacity = 0.2,
+    this.disabledOpacity = 0.5,
   });
 
   final String tooltip;
