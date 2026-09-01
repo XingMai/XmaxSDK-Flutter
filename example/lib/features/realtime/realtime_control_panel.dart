@@ -84,7 +84,7 @@ final class XLabRealtimeControlPanel extends StatelessWidget {
     required this.generating,
     required this.busy,
     required this.promptController,
-    required this.references,
+    required this.referencesByCategory,
     required this.selectedReference,
     required this.onModeChanged,
     required this.onStop,
@@ -101,7 +101,7 @@ final class XLabRealtimeControlPanel extends StatelessWidget {
   final bool generating;
   final bool busy;
   final TextEditingController promptController;
-  final List<XLabRealtimeReference> references;
+  final Map<String, List<XLabRealtimeReference>> referencesByCategory;
   final XLabRealtimeReference? selectedReference;
   final XLabRealtimeReference? promptReference;
   final ValueChanged<XLabRealtimePanelMode> onModeChanged;
@@ -181,25 +181,40 @@ final class XLabRealtimeControlPanel extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 4),
-          SizedBox(height: 50, child: _content()),
+          SizedBox(height: 50, child: _categoryContents()),
         ],
       ),
     ),
   );
 
-  Widget _content() {
-    if (mode.usesReferences) {
-      final visible = references
-          .where((item) => item.categoryID == mode.id)
-          .toList(growable: false);
+  Widget _categoryContents() => Stack(
+    fit: StackFit.expand,
+    children: <Widget>[
+      for (final item in XLabRealtimePanelMode.values)
+        Offstage(
+          key: ValueKey<String>('category-content-${item.id}'),
+          offstage: item != mode,
+          child: TickerMode(
+            enabled: item == mode,
+            child: _content(item, isVisible: item == mode),
+          ),
+        ),
+    ],
+  );
+
+  Widget _content(XLabRealtimePanelMode item, {required bool isVisible}) {
+    if (item.usesReferences) {
       return _ReferenceStrip(
-        references: visible,
+        key: ValueKey<String>('reference-strip-${item.id}'),
+        references:
+            referencesByCategory[item.id] ?? const <XLabRealtimeReference>[],
         selectedReference: selectedReference,
+        isVisible: isVisible,
         onReferenceChanged: onReferenceChanged,
         onAddReference: onAddReference,
       );
     }
-    if (mode == XLabRealtimePanelMode.touch) {
+    if (item == XLabRealtimePanelMode.touch) {
       return Padding(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
         child: SizedBox.expand(
@@ -295,12 +310,15 @@ final class _ReferenceStrip extends StatefulWidget {
   const _ReferenceStrip({
     required this.references,
     required this.selectedReference,
+    required this.isVisible,
     required this.onReferenceChanged,
     required this.onAddReference,
+    super.key,
   });
 
   final List<XLabRealtimeReference> references;
   final XLabRealtimeReference? selectedReference;
+  final bool isVisible;
   final ValueChanged<XLabRealtimeReference?> onReferenceChanged;
   final VoidCallback onAddReference;
 
@@ -310,11 +328,12 @@ final class _ReferenceStrip extends StatefulWidget {
 
 final class _ReferenceStripState extends State<_ReferenceStrip> {
   final Map<String, GlobalKey> _referenceKeys = <String, GlobalKey>{};
+  final ScrollController _scrollController = ScrollController();
 
   @override
   void initState() {
     super.initState();
-    _scheduleCenterSelectedReference();
+    if (widget.isVisible) _scheduleCenterSelectedReference();
   }
 
   @override
@@ -322,10 +341,18 @@ final class _ReferenceStripState extends State<_ReferenceStrip> {
     super.didUpdateWidget(oldWidget);
     final oldIndex = _selectedIndex(oldWidget);
     final newIndex = _selectedIndex(widget);
-    if (oldWidget.selectedReference?.id != widget.selectedReference?.id ||
-        oldIndex != newIndex) {
+    if (widget.isVisible &&
+        (!oldWidget.isVisible ||
+            oldWidget.selectedReference?.id != widget.selectedReference?.id ||
+            oldIndex != newIndex)) {
       _scheduleCenterSelectedReference();
     }
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
   }
 
   int _selectedIndex(_ReferenceStrip target) {
@@ -353,6 +380,7 @@ final class _ReferenceStripState extends State<_ReferenceStrip> {
 
   @override
   Widget build(BuildContext context) => ListView.separated(
+    controller: _scrollController,
     scrollDirection: Axis.horizontal,
     clipBehavior: Clip.none,
     padding: const EdgeInsets.only(left: 14, right: 14, bottom: 6),

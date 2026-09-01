@@ -21,7 +21,12 @@ void main() {
           generating: false,
           busy: false,
           promptController: controller,
-          references: <XLabRealtimeReference>[uploading, ready],
+          referencesByCategory: <String, List<XLabRealtimeReference>>{
+            XLabRealtimePanelMode.character.id: <XLabRealtimeReference>[
+              uploading,
+              ready,
+            ],
+          },
           selectedReference: uploading,
           onModeChanged: (_) {},
           onStop: () {},
@@ -71,7 +76,7 @@ void main() {
           generating: false,
           busy: false,
           promptController: controller,
-          references: const <XLabRealtimeReference>[],
+          referencesByCategory: const <String, List<XLabRealtimeReference>>{},
           selectedReference: null,
           promptReference: _reference(
             id: 'prompt-ready',
@@ -113,7 +118,7 @@ void main() {
           generating: false,
           busy: false,
           promptController: controller,
-          references: const <XLabRealtimeReference>[],
+          referencesByCategory: const <String, List<XLabRealtimeReference>>{},
           selectedReference: null,
           promptReference: _reference(
             id: 'prompt-uploading',
@@ -158,21 +163,117 @@ void main() {
     expect(referenceActions, 0);
     expect(submissions, 0);
   });
+
+  testWidgets('reference categories retain independent list state', (
+    tester,
+  ) async {
+    final controller = TextEditingController();
+    addTearDown(controller.dispose);
+    var mode = XLabRealtimePanelMode.character;
+    late StateSetter update;
+
+    final referencesByCategory = <String, List<XLabRealtimeReference>>{
+      XLabRealtimePanelMode.character.id: List<XLabRealtimeReference>.generate(
+        12,
+        (index) => _reference(
+          id: 'character-$index',
+          referencePath: '/character-$index.png',
+        ),
+      ),
+      XLabRealtimePanelMode.clothing.id: List<XLabRealtimeReference>.generate(
+        12,
+        (index) => _reference(
+          id: 'clothing-$index',
+          mode: XLabRealtimePanelMode.clothing,
+          referencePath: '/clothing-$index.png',
+        ),
+      ),
+    };
+
+    await tester.pumpWidget(
+      _TestApp(
+        child: SizedBox(
+          width: 280,
+          child: StatefulBuilder(
+            builder: (context, setState) {
+              update = setState;
+              return XLabRealtimeControlPanel(
+                mode: mode,
+                generating: false,
+                busy: false,
+                promptController: controller,
+                referencesByCategory: referencesByCategory,
+                selectedReference: null,
+                onModeChanged: (_) {},
+                onStop: () {},
+                onReferenceChanged: (_) {},
+                onAddReference: () {},
+                onTouchStart: () {},
+                onPromptSubmit: () {},
+                onPromptReference: () {},
+              );
+            },
+          ),
+        ),
+      ),
+    );
+
+    final characterStrip = find.byKey(
+      const ValueKey<String>('reference-strip-charx'),
+      skipOffstage: false,
+    );
+    final clothingStrip = find.byKey(
+      const ValueKey<String>('reference-strip-clothx'),
+      skipOffstage: false,
+    );
+    expect(characterStrip, findsOneWidget);
+    expect(clothingStrip, findsOneWidget);
+
+    await tester.drag(characterStrip, const Offset(-260, 0));
+    await tester.pumpAndSettle();
+    final characterOffset = _scrollOffset(tester, characterStrip);
+    expect(characterOffset, greaterThan(0));
+
+    update(() => mode = XLabRealtimePanelMode.clothing);
+    await tester.pump();
+    expect(_scrollOffset(tester, clothingStrip), 0);
+
+    await tester.drag(clothingStrip, const Offset(-140, 0));
+    await tester.pumpAndSettle();
+    final clothingOffset = _scrollOffset(tester, clothingStrip);
+    expect(clothingOffset, greaterThan(0));
+
+    update(() => mode = XLabRealtimePanelMode.character);
+    await tester.pump();
+    expect(_scrollOffset(tester, characterStrip), characterOffset);
+    expect(_scrollOffset(tester, clothingStrip), clothingOffset);
+  });
 }
 
 XLabRealtimeReference _reference({
   required String id,
+  XLabRealtimePanelMode mode = XLabRealtimePanelMode.character,
   String? referencePath,
   XLabRealtimeReferenceUploadState uploadState =
       XLabRealtimeReferenceUploadState.ready,
 }) => XLabRealtimeReference(
   id: id,
-  categoryID: XLabRealtimePanelMode.character.id,
+  categoryID: mode.id,
   title: id,
   referencePath: referencePath,
   sourceURL: Uri.file('/tmp/$id.png'),
   uploadState: uploadState,
 );
+
+double _scrollOffset(WidgetTester tester, Finder strip) => tester
+    .state<ScrollableState>(
+      find.descendant(
+        of: strip,
+        matching: find.byType(Scrollable, skipOffstage: false),
+      ),
+    )
+    .position
+    .pixels;
 
 final class _TestApp extends StatelessWidget {
   const _TestApp({required this.child});

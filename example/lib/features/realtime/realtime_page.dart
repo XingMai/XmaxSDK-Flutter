@@ -33,7 +33,10 @@ class _RealtimePageState extends State<RealtimePage>
   late XmaxRealtimeManaging _manager;
   late XmaxStorageManaging _storageManager;
   final _promptController = TextEditingController();
-  final _references = <XLabRealtimeReference>[];
+  final _referencesByCategory = <String, List<XLabRealtimeReference>>{
+    for (final mode in XLabRealtimePanelMode.values)
+      if (mode.usesReferences) mode.id: <XLabRealtimeReference>[],
+  };
   RealtimeMediaStream? _localStream;
   RealtimeMediaStream? _remoteStream;
   RealtimeState _state = const RealtimeState(
@@ -67,7 +70,13 @@ class _RealtimePageState extends State<RealtimePage>
   Future<void> _loadReferences() async {
     final references = await loadXLabRealtimeReferences();
     if (!mounted) return;
-    setState(() => _references.addAll(references));
+    setState(() {
+      for (final reference in references) {
+        _referencesByCategory
+            .putIfAbsent(reference.categoryID, () => <XLabRealtimeReference>[])
+            .add(reference);
+      }
+    });
   }
 
   void _configureManager() {
@@ -277,7 +286,12 @@ class _RealtimePageState extends State<RealtimePage>
         if (forPrompt) {
           _promptReference = reference;
         } else {
-          _references.insert(0, reference);
+          _referencesByCategory
+              .putIfAbsent(
+                reference.categoryID,
+                () => <XLabRealtimeReference>[],
+              )
+              .insert(0, reference);
           _selectedReference = reference;
         }
       });
@@ -482,7 +496,7 @@ class _RealtimePageState extends State<RealtimePage>
                 generating: generating,
                 busy: _busy,
                 promptController: _promptController,
-                references: _references,
+                referencesByCategory: _referencesByCategory,
                 selectedReference: _selectedReference,
                 promptReference: _promptReference,
                 onModeChanged: _selectMode,
