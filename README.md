@@ -50,7 +50,7 @@ Add XmaxSDK to the application's `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  xmax_sdk: ^1.0.0
+  xmax_sdk: ^1.0.1
 ```
 
 To use a Git revision before it is published to pub.dev, declare a Git dependency
@@ -61,7 +61,7 @@ dependencies:
   xmax_sdk:
     git:
       url: https://github.com/XingMai/XmaxSDK-Flutter.git
-      ref: 1.0.0
+      ref: 1.0.1
 ```
 
 During local development, a path dependency can be used instead:
