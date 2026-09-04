@@ -3,7 +3,7 @@ import 'dart:io';
 
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
-import 'package:xmax_sdk/XmaxSDK.dart';
+import 'package:xmax_sdk/xmax_sdk.dart';
 
 import 'realtime_control_panel.dart';
 import 'realtime_camera_switch_transition.dart';

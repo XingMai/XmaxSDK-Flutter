@@ -16,7 +16,7 @@ With just a few lines of code, developers can integrate features such as
 real-time character swap, virtual try-on, mixed-reality companions,
 and interactive image animation directly into their apps.
 
-<p align="center"><img src="./docs/images/xlab/generation-demo.gif" alt="X-Lab realtime generation demo" width="33%" /><img src="./docs/images/xlab/index-demo.gif" alt="X-Lab index demo" width="33%" /><img src="./docs/images/xlab/storage-demo.gif" alt="X-Lab storage demo" width="33%" /></p>
+<p align="center"><img src="./doc/images/xlab/generation-demo.gif" alt="X-Lab realtime generation demo" width="33%" /><img src="./doc/images/xlab/index-demo.gif" alt="X-Lab index demo" width="33%" /><img src="./doc/images/xlab/storage-demo.gif" alt="X-Lab storage demo" width="33%" /></p>
 
 <br>
 
@@ -46,19 +46,25 @@ and interactive image animation directly into their apps.
 
 ## Installation
 
-XmaxSDK is currently distributed as a Git package. Add it to the application's
-`pubspec.yaml`:
+Add XmaxSDK to the application's `pubspec.yaml`:
+
+```yaml
+dependencies:
+  xmax_sdk: ^1.0.0
+```
+
+To use a Git revision before it is published to pub.dev, declare a Git dependency
+and pin its `ref` to a release tag or commit:
 
 ```yaml
 dependencies:
   xmax_sdk:
     git:
       url: https://github.com/XingMai/XmaxSDK-Flutter.git
+      ref: 1.0.0
 ```
 
-For reproducible builds, pin the dependency to a release tag or commit with the
-Git dependency's `ref` field. During local development, a path dependency can be
-used instead:
+During local development, a path dependency can be used instead:
 
 ```yaml
 dependencies:
@@ -197,12 +203,17 @@ against the shared NDK C++ runtime without bundling it. Ensure the host APK incl
 `prepareRtcCppRuntime` task that copies the matching runtime from the pinned NDK;
 apply the same host configuration when integrating XmaxSDK into another Android app.
 
+Release builds with R8 must also suppress warnings for optional device and serializer
+APIs referenced by VolcEngine RTC and Tencent COS. Add the rules from the example's
+[`proguard-rules.pro`](example/android/app/proguard-rules.pro) to the host
+application's Release ProGuard configuration.
+
 ## Getting Started
 
 ### Create a client
 
 ```dart
-import 'package:xmax_sdk/XmaxSDK.dart';
+import 'package:xmax_sdk/xmax_sdk.dart';
 
 final client = XmaxClient(
   configuration: XmaxConfiguration(apiKey: 'YOUR_API_KEY'),
@@ -276,10 +287,9 @@ XmaxRealtimeVideoView(
 )
 ```
 
-It retains the local preview underneath the generated video, fades the remote
-track in when its RTC binding is ready, and automatically returns to the local
-preview after `stopGeneration()` or `disconnect()`. This avoids black frames
-during native video-view handoff.
+It retains the local preview underneath the generated video, displays the remote
+track after its RTC stream is selected, and automatically returns to the local
+preview after `stopGeneration()` or `disconnect()`.
 
 Use separate `XmaxVideoView` widgets only when the application needs custom
 composition such as picture-in-picture:
@@ -400,7 +410,7 @@ It demonstrates camera generation, camera switching, live prompt updates, defaul
 and custom trajectory rendering, storage upload, image safety checks, state and
 quality monitoring, and lifecycle-aware resource cleanup.
 
-<p align="center"><img src="./docs/images/xlab/home.jpg" alt="X-Lab home" width="20%" /><img src="./docs/images/xlab/features.jpg" alt="X-Lab SDK features" width="20%" /><img src="./docs/images/xlab/storage.jpg" alt="X-Lab storage service" width="20%" /><img src="./docs/images/xlab/realtime-generation.jpg" alt="X-Lab realtime generation" width="20%" /><img src="./docs/images/xlab/trajectory-generation.jpg" alt="X-Lab trajectory generation" width="20%" /></p>
+<p align="center"><img src="./doc/images/xlab/home.jpg" alt="X-Lab home" width="20%" /><img src="./doc/images/xlab/features.jpg" alt="X-Lab SDK features" width="20%" /><img src="./doc/images/xlab/storage.jpg" alt="X-Lab storage service" width="20%" /><img src="./doc/images/xlab/realtime-generation.jpg" alt="X-Lab realtime generation" width="20%" /><img src="./doc/images/xlab/trajectory-generation.jpg" alt="X-Lab trajectory generation" width="20%" /></p>
 
 Run it on a physical device:
 

@@ -4,7 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:xmax_sdk/src/core/storage/XmaxStorageManager.dart';
 import 'package:xmax_sdk/src/foundation/storage/StorageModels.dart';
 import 'package:xmax_sdk/src/service/storage/StorageServicing.dart';
-import 'package:xmax_sdk/XmaxSDK.dart';
+import 'package:xmax_sdk/xmax_sdk.dart';
 
 void main() {
   late _FakeStorageService service;

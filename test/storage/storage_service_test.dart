@@ -6,7 +6,7 @@ import 'package:xmax_sdk/src/foundation/storage/StorageManaging.dart';
 import 'package:xmax_sdk/src/foundation/storage/StorageModels.dart';
 import 'package:xmax_sdk/src/service/network/ApiServicing.dart';
 import 'package:xmax_sdk/src/service/storage/StorageService.dart';
-import 'package:xmax_sdk/XmaxSDK.dart';
+import 'package:xmax_sdk/xmax_sdk.dart';
 
 void main() {
   late _FakeApiService apiService;

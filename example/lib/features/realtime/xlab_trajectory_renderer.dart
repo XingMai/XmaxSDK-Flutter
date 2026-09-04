@@ -2,7 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
-import 'package:xmax_sdk/XmaxSDK.dart';
+import 'package:xmax_sdk/xmax_sdk.dart';
 
 /// XLab 自定义轨迹效果，以粉、蓝双色区分多指轨迹。
 final class XLabTrajectoryRenderer extends ChangeNotifier

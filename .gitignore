@@ -1,4 +1,5 @@
 # Miscellaneous
+.cicd/
 *.class
 *.log
 *.pyc

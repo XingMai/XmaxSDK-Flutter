@@ -60,7 +60,7 @@ fvm flutter create \
   .
 ```
 
-生成后保留标准 Package 元数据，并将当前 `docs/` 纳入仓库。根工程不生成 `ios/` 和 `android/` 原生实现目录。
+生成后保留标准 Package 元数据，并将当前 `doc/` 纳入仓库。根工程不生成 `ios/` 和 `android/` 原生实现目录。
 
 根目录目标结构：
 
@@ -86,7 +86,7 @@ Flutter/
 │       └── XmaxSDKInfo.dart
 ├── test/
 ├── example/
-└── docs/
+└── doc/
 ```
 
 阶段 0 只创建能够编译的公开 API 骨架和最小内部目录，不提前写 RTC/COS 假实现。尚未实现的公开能力不能返回虚假成功结果。
@@ -321,7 +321,7 @@ Flutter 3.47.1 使用 AGP 9.1，而 COS 1.2.9 与火山 Flutter 3.60.6 的插件
 ### 0B：创建 Package
 
 1. 在当前根目录生成 `xmax_sdk` Package。
-2. 合并现有 `docs/`，不覆盖设计文档。
+2. 合并现有 `doc/`，不覆盖设计文档。
 3. 配置 Dart/Flutter SDK 约束和第三方依赖。
 4. 创建 `lib/XmaxSDK.dart` 与 iOS 对齐的目录骨架。
 5. 配置 format、analyze 和 unit test。
