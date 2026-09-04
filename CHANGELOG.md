@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.1
+
+- 修复使用新版腾讯 COS 依赖时 Android Release 构建的 R8 缺失类型错误。
+- 完善 Android 宿主的 R8 配置说明，确保 pub.dev、Git 和本地 path 接入可正常构建。
+
 ## 1.0.0
 
 - SDK Dart 文件名与 iOS 对齐为首字母大写驼峰，Example 保持 Flutter snake_case。

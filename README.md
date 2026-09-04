@@ -204,9 +204,22 @@ against the shared NDK C++ runtime without bundling it. Ensure the host APK incl
 apply the same host configuration when integrating XmaxSDK into another Android app.
 
 Release builds with R8 must also suppress warnings for optional device and serializer
-APIs referenced by VolcEngine RTC and Tencent COS. Add the rules from the example's
-[`proguard-rules.pro`](example/android/app/proguard-rules.pro) to the host
-application's Release ProGuard configuration.
+APIs referenced by VolcEngine RTC and Tencent COS. Add the following rules to the
+host application's Release ProGuard configuration:
+
+```proguard
+-dontwarn com.hihonor.android.magicx.media.audio.interfaces.**
+-dontwarn java.awt.**
+-dontwarn javax.money.**
+-dontwarn com.google.common.collect.ArrayListMultimap
+-dontwarn com.google.common.collect.Multimap
+-dontwarn org.javamoney.moneta.**
+-dontwarn org.joda.time.**
+-dontwarn springfox.documentation.spring.web.json.Json
+```
+
+The same configuration is available in the example's
+[`proguard-rules.pro`](example/android/app/proguard-rules.pro).
 
 ## Getting Started
 
