@@ -1,0 +1,43 @@
+# Miscellaneous
+.cicd/
+*.class
+*.log
+*.pyc
+*.swp
+.DS_Store
+.atom/
+.build/
+.buildlog/
+.history
+.svn/
+.swiftpm/
+
+# IDE
+*.iml
+*.ipr
+*.iws
+.idea/
+
+# FVM
+.fvm/
+.fvmrc
+
+# Flutter/Dart/Pub
+**/doc/api/
+**/ios/Flutter/.last_build_id
+.dart_tool/
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+/build/
+/coverage/
+/pubspec.lock
+**/android/build/reports/
+
+# Build outputs
+app.*.symbols
+app.*.map.json
+.widget_preview/
+
+# Demo videos are hosted from the GitHub repository and are not runtime assets.
+doc/videos/
