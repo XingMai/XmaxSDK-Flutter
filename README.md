@@ -602,28 +602,18 @@ Logging configuration is process-wide and shared by all `XmaxClient` instances.
 
 ## Example Project
 
-A complete Flutter example application is available in [`example`](example). It
-demonstrates real-time generation using a live camera feed, camera switching, live
-prompt updates, reference-image upload, default and custom trajectory rendering,
-storage operations, state and quality monitoring, and lifecycle-aware resource
-cleanup on iOS and Android.
+A complete example application for both iOS and Android is available in
+[`example`](https://github.com/XingMai/XmaxSDK-Flutter/tree/main/example). It
+demonstrates real-time generation using live camera feeds and reference images.
 
 <p align="center"><img src="./doc/images/xlab/home.jpg" alt="X-Lab home" width="20%" /><img src="./doc/images/xlab/features.jpg" alt="X-Lab SDK features" width="20%" /><img src="./doc/images/xlab/storage.jpg" alt="X-Lab storage service" width="20%" /><img src="./doc/images/xlab/realtime-generation.jpg" alt="X-Lab realtime generation" width="20%" /><img src="./doc/images/xlab/trajectory-generation.jpg" alt="X-Lab trajectory generation" width="20%" /></p>
-
-Run it on a physical device:
-
-```bash
-cd example
-flutter pub get
-flutter run
-```
 
 <br>
 
 ## Dependencies
 
-- <ins><strong>VolcEngine RTC Flutter SDK</strong></ins> enables low-latency, real-time video communication on iOS and Android.
-- <ins><strong>Tencent Cloud COS Flutter SDK</strong></ins> handles media upload and download through object storage.
+- <ins><strong>VolcEngine RTC SDK for Flutter</strong></ins> enables low-latency, real-time audio and video communication.
+- <ins><strong>Tencent Cloud COS SDK</strong></ins> handles media upload and download via object storage.
 
 <br>
 
