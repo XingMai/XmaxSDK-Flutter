@@ -604,7 +604,7 @@ Logging configuration is process-wide and shared by all `XmaxClient` instances.
 
 A complete example application for both iOS and Android is available in
 [`example`](https://github.com/XingMai/XmaxSDK-Flutter/tree/main/example). It
-demonstrates real-time generation using live camera feeds and reference images.
+demonstrates real-time generation using live camera feeds.
 
 <p align="center"><img src="./doc/images/xlab/home.jpg" alt="X-Lab home" width="20%" /><img src="./doc/images/xlab/features.jpg" alt="X-Lab SDK features" width="20%" /><img src="./doc/images/xlab/storage.jpg" alt="X-Lab storage service" width="20%" /><img src="./doc/images/xlab/realtime-generation.jpg" alt="X-Lab realtime generation" width="20%" /><img src="./doc/images/xlab/trajectory-generation.jpg" alt="X-Lab trajectory generation" width="20%" /></p>
 
