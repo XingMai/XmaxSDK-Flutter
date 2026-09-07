@@ -11,12 +11,15 @@
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-MIT-4C9A2A" alt="MIT License"></a>
 </p>
 
-XmaxSDK is a Flutter SDK which provides access to Xmax's real-time, interactive
-video generation models on iOS and Android. It enables low-latency,
-cost-efficient, and high-fidelity video transformations, conditioned on reference
-images, text prompts, and user interactions. With concise Dart APIs and Flutter
-widgets, developers can integrate features such as real-time character swapping,
-virtual try-on, or AI companions into their applications.
+A Flutter SDK, providing access to Xmax's real-time, interactive video generation
+models. The models are optimized for low latency and cost efficiency, enabling
+instantaneous video transformations across diverse characters, outfits, and
+aesthetic styles. Also, they can dynamically respond to user gestures, allowing
+interactive virtual subjects to blend into real-world footage for immersive
+experiences. XmaxSDK implements an end-to-end pipeline to leverage these novel
+capabilities through concise Dart APIs and Flutter widgets, making it easy for
+developers to build next-generation interactive video experiences across iOS and
+Android.
 
 <p align="center"><img src="./doc/images/xlab/generation-demo.gif" alt="X-Lab realtime generation demo" width="33%" /><img src="./doc/images/xlab/index-demo.gif" alt="X-Lab index demo" width="33%" /><img src="./doc/images/xlab/storage-demo.gif" alt="X-Lab storage demo" width="33%" /></p>
 
@@ -24,12 +27,12 @@ virtual try-on, or AI companions into their applications.
 
 ## What XmaxSDK does
 
-XmaxSDK gives an end-to-end pipeline covering media capture, low-latency video
-communication, frame-by-frame generation, and in-app rendering. The SDK streams
-live camera input to our cloud AI engine and renders the generated video through
-Flutter widgets, while supporting live prompt updates, reference images, camera
-switching, and touch interaction. With the workflow abstracted into simple API
-calls, integrating real-time video generation is seamless and intuitive.
+XmaxSDK offers a complete workflow that covers media acquisition, low-latency video
+communication, frame-by-frame generation, and in-app rendering. When processing
+live camera feeds, it streams media to our cloud inference service, applies
+on-device enhancement to the returned video, and renders the result to screen.
+With the entire workflow abstracted into simple API calls, integrating real-time
+video generation is seamless and intuitive.
 
 <br>
 
