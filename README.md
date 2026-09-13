@@ -395,6 +395,7 @@ class RealtimePage extends StatefulWidget {
 }
 
 class _RealtimePageState extends State<RealtimePage> {
+  static const _model = RealtimeModel.x2_0;
   late final XmaxRealtimeManaging _realtime;
   RealtimeMediaStream? _localStream;
   RealtimeMediaStream? _remoteStream;
@@ -407,18 +408,14 @@ class _RealtimePageState extends State<RealtimePage> {
       configuration: XmaxConfiguration(apiKey: 'YOUR_XMAX_API_KEY'),
     );
     _realtime = client.createRealtimeManager(
-      options: const RealtimeConfiguration(model: RealtimeModel.x2_0),
+      options: const RealtimeConfiguration(model: _model),
     );
     unawaited(_start());
   }
 
   Future<void> _start() async {
     final localStream = await _realtime.createLocalCameraStream(
-      videoFormat: const RealtimeVideoFormat(
-        width: 704,
-        height: 1280,
-        fps: 24,
-      ),
+      videoFormat: _model.defaultCameraVideoFormat,
       position: CameraPosition.front,
     );
     if (!mounted) return;
@@ -457,6 +454,11 @@ class _RealtimePageState extends State<RealtimePage> {
   }
 }
 ```
+
+Use `RealtimeModel.x2_0_pro` for X2.0 Pro. Its camera default is 1024×1920
+at 30 fps, and it accepts only 1024×1920 or 1920×1024 input resolutions.
+Keep the selected model and camera format together as shown above; XLab also
+persists the model selected on its home screen.
 
 The widget keeps the local camera preview underneath the generated video, enables
 touch interaction by default, and returns to the local preview after

@@ -5,7 +5,9 @@ import '../../foundation/media/camera/CameraPosition.dart';
 import '../../foundation/rtc/RtcManager.dart';
 import '../../media/MediaController.dart';
 import '../../media/MediaControlling.dart';
+import '../../media/camera/CameraController.dart';
 import '../../render/RenderController.dart';
+import '../../service/media/MediaService.dart';
 import '../../service/network/ApiServicing.dart';
 import '../../service/realtime/RealtimeContext.dart';
 import '../../service/realtime/RealtimeError.dart';
@@ -42,6 +44,10 @@ final class XmaxRealtimeManager implements XmaxRealtimeManaging {
 
     final mediaController = MediaController(
       rtcManager: rtcManager,
+      cameraController: CameraController(
+        rtcManager: rtcManager,
+        mediaService: MediaService(model: options.model),
+      ),
       interactionListener: (taskID, points) =>
           streamController.sendTracks(taskID: taskID, points: points),
     );

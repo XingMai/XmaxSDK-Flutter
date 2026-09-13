@@ -78,6 +78,8 @@ void main() {
         300,
         scrollable: find.byType(Scrollable).first,
       );
+      await tester.ensureVisible(find.text('存储服务'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('存储服务'));
       await tester.pumpAndSettle();
       expect(
@@ -94,6 +96,8 @@ void main() {
         300,
         scrollable: find.byType(Scrollable).first,
       );
+      await tester.ensureVisible(find.text('Storage Service'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Storage Service'));
       await tester.pumpAndSettle();
       expect(

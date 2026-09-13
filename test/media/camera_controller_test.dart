@@ -8,7 +8,9 @@ import 'package:xmax_sdk/src/foundation/rtc/RtcManaging.dart';
 import 'package:xmax_sdk/src/foundation/rtc/RtcModels.dart';
 import 'package:xmax_sdk/src/media/camera/CameraController.dart';
 import 'package:xmax_sdk/src/service/media/MediaServicing.dart';
+import 'package:xmax_sdk/src/service/media/MediaService.dart';
 import 'package:xmax_sdk/src/service/realtime/RealtimeVideoFormat.dart';
+import 'package:xmax_sdk/xmax_sdk.dart' show RealtimeModel;
 
 void main() {
   test('preview listener survives an RTC destroy and camera restart', () async {
@@ -74,6 +76,54 @@ void main() {
       expect(stream.videoTrack?.position, CameraPosition.front);
     },
   );
+
+  test('x2.0-pro camera preserves its bucket and 30 fps', () async {
+    final rtc = _FakeRtc();
+    final camera = CameraController(
+      rtcManager: rtc,
+      permissionManager: const _AllowedPermissions(),
+      mediaService: MediaService(model: RealtimeModel.x2_0_pro),
+    );
+    final format = RealtimeModel.x2_0_pro.defaultCameraVideoFormat;
+
+    final stream = await camera.createLocalCameraStream(
+      videoFormat: format,
+      position: CameraPosition.front,
+    );
+
+    expect(stream.videoTrack?.videoFormat, format);
+    expect(rtc.lastCaptureSize, const Size(1024, 1920));
+    expect(rtc.lastCaptureFrameRate, 30);
+    await camera.stopLocalCameraStream();
+  });
+
+  test('x2.0-pro camera rejects an unsupported input size', () async {
+    final rtc = _FakeRtc();
+    final camera = CameraController(
+      rtcManager: rtc,
+      permissionManager: const _AllowedPermissions(),
+      mediaService: MediaService(model: RealtimeModel.x2_0_pro),
+    );
+
+    await expectLater(
+      camera.createLocalCameraStream(
+        videoFormat: const RealtimeVideoFormat(
+          width: 832,
+          height: 1472,
+          fps: 24,
+        ),
+        position: CameraPosition.front,
+      ),
+      throwsA(
+        isA<XmaxError>().having(
+          (error) => error.code,
+          'code',
+          XmaxErrorCode.invalidConfiguration,
+        ),
+      ),
+    );
+    expect(rtc.lastCaptureSize, isNull);
+  });
 }
 
 final class _AllowedPermissions implements PermissionManaging {
@@ -96,6 +146,8 @@ final class _IdentityMediaService implements MediaServicing {
 final class _FakeRtc implements RtcManaging {
   void Function()? previewReadyListener;
   Object? switchError;
+  Size? lastCaptureSize;
+  int? lastCaptureFrameRate;
 
   void notifyPreviewReady() => previewReadyListener?.call();
 
@@ -141,7 +193,10 @@ final class _FakeRtc implements RtcManaging {
     required int width,
     required int height,
     required int frameRate,
-  }) async {}
+  }) async {
+    lastCaptureSize = Size(width.toDouble(), height.toDouble());
+    lastCaptureFrameRate = frameRate;
+  }
 
   @override
   Future<void> stopVideoCapture() async {}

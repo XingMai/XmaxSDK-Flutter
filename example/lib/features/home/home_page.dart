@@ -24,11 +24,14 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   static const _apiKeyStorageKey = 'xlab.realtime.apiKey';
+  static const _modelStorageKey = 'xlab.realtime.model';
   static const _isImagePipelineEnabled = false;
   final _apiKeyController = TextEditingController();
   final _preferences = SharedPreferencesAsync();
   bool _obscureApiKey = true;
   bool _isPickingImage = false;
+  RealtimeModel _selectedModel = RealtimeModel.x2_0;
+  int _modelSelectionVersion = 0;
 
   String get _minimumOS => switch (defaultTargetPlatform) {
     TargetPlatform.android => 'Android 8.0+',
@@ -40,6 +43,26 @@ class _HomePageState extends State<HomePage> {
   void initState() {
     super.initState();
     unawaited(_loadAPIKey());
+    unawaited(_loadSelectedModel());
+  }
+
+  Future<void> _loadSelectedModel() async {
+    final version = _modelSelectionVersion;
+    final saved = await _preferences.getString(_modelStorageKey);
+    if (!mounted || version != _modelSelectionVersion) return;
+
+    final selected = RealtimeModel.values.firstWhere(
+      (model) => model.value == saved,
+      orElse: () => RealtimeModel.x2_0,
+    );
+    setState(() => _selectedModel = selected);
+  }
+
+  void _selectModel(RealtimeModel model) {
+    if (model == _selectedModel) return;
+    _modelSelectionVersion += 1;
+    setState(() => _selectedModel = model);
+    unawaited(_preferences.setString(_modelStorageKey, model.value));
   }
 
   Future<void> _loadAPIKey() async {
@@ -92,13 +115,21 @@ class _HomePageState extends State<HomePage> {
   }
 
   void _open(
-    Widget Function(String apiKey, XmaxEnvironment environment) builder,
+    Widget Function(
+      String apiKey,
+      XmaxEnvironment environment,
+      RealtimeModel model,
+    )
+    builder,
   ) {
     final apiKey = _apiKeyForNavigation();
     if (apiKey == null) return;
     final environment = XLabLocalization.shared.environment;
+    final model = _selectedModel;
     Navigator.of(context).push(
-      MaterialPageRoute<void>(builder: (_) => builder(apiKey, environment)),
+      MaterialPageRoute<void>(
+        builder: (_) => builder(apiKey, environment, model),
+      ),
     );
   }
 
@@ -123,6 +154,7 @@ class _HomePageState extends State<HomePage> {
           builder: (_) => RealtimePage(
             apiKey: apiKey,
             environment: XLabLocalization.shared.environment,
+            model: _selectedModel,
             localInput: XLabRealtimeImageInput(
               path: image.path,
               name: image.name,
@@ -191,7 +223,10 @@ class _HomePageState extends State<HomePage> {
                   ),
                   const SizedBox(width: 8),
                   Expanded(
-                    child: _Metric(label: t('feed.latestModel'), value: 'X2.0'),
+                    child: _Metric(
+                      label: t('feed.latestModel'),
+                      value: RealtimeModel.values.last.value.toUpperCase(),
+                    ),
                   ),
                 ],
               ),
@@ -211,8 +246,11 @@ class _HomePageState extends State<HomePage> {
                 capability: 'createLocalCameraStream()',
                 color: XLabPalette.mint,
                 onTap: () => _open(
-                  (apiKey, environment) =>
-                      RealtimePage(apiKey: apiKey, environment: environment),
+                  (apiKey, environment, model) => RealtimePage(
+                    apiKey: apiKey,
+                    environment: environment,
+                    model: model,
+                  ),
                 ),
               ),
               if (_isImagePipelineEnabled) ...<Widget>[
@@ -243,9 +281,10 @@ class _HomePageState extends State<HomePage> {
                 icon: Icons.gesture_rounded,
                 iconLabel: 'RENDER',
                 onTap: () => _open(
-                  (apiKey, environment) => RealtimePage(
+                  (apiKey, environment, model) => RealtimePage(
                     apiKey: apiKey,
                     environment: environment,
+                    model: model,
                     customTrajectory: true,
                   ),
                 ),
@@ -261,7 +300,7 @@ class _HomePageState extends State<HomePage> {
                 icon: Icons.cloud_upload_outlined,
                 iconLabel: 'UPLOAD',
                 onTap: () => _open(
-                  (apiKey, environment) =>
+                  (apiKey, environment, _) =>
                       StoragePage(apiKey: apiKey, environment: environment),
                 ),
               ),
@@ -351,7 +390,10 @@ class _HomePageState extends State<HomePage> {
               ),
             ),
             Text(
-              XLabLocalization.shared.formatCount('feed.model.count', 1),
+              XLabLocalization.shared.formatCount(
+                'feed.model.count',
+                RealtimeModel.values.length,
+              ),
               style: TextStyle(
                 color: Color(0x70FFFFFF),
                 fontSize: 8,
@@ -476,45 +518,90 @@ class _HomePageState extends State<HomePage> {
           ),
         ),
         const SizedBox(height: 12),
-        Container(
-          height: 56,
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          decoration: BoxDecoration(
-            color: XLabPalette.mint.withValues(alpha: 0.06),
-            borderRadius: BorderRadius.circular(10),
+        for (final model in RealtimeModel.values) ...<Widget>[
+          if (model != RealtimeModel.values.first) const SizedBox(height: 4),
+          _ModelOptionRow(
+            model: model,
+            selected: model == _selectedModel,
+            onTap: () => _selectModel(model),
           ),
-          child: Row(
-            children: <Widget>[
-              Text('◆', style: TextStyle(color: XLabPalette.mint, fontSize: 8)),
-              SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    Text(
-                      'X2.0',
-                      style: TextStyle(
-                        color: Color(0xFFF0F2F5),
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
-                      ),
+        ],
+      ],
+    ),
+  );
+}
+
+final class _ModelOptionRow extends StatelessWidget {
+  const _ModelOptionRow({
+    required this.model,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final RealtimeModel model;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    button: true,
+    selected: selected,
+    child: GestureDetector(
+      key: ValueKey<String>('model-${model.value}'),
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: Container(
+        height: 56,
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        decoration: BoxDecoration(
+          color: selected
+              ? XLabPalette.mint.withValues(alpha: 0.063)
+              : Colors.white.withValues(alpha: 0.025),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: selected
+                ? XLabPalette.mint.withValues(alpha: 0.16)
+                : Colors.transparent,
+          ),
+        ),
+        child: Row(
+          children: <Widget>[
+            const Text(
+              '◆',
+              style: TextStyle(color: XLabPalette.mint, fontSize: 8),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Text(
+                    model.value.toUpperCase().replaceAll('-', ' '),
+                    style: const TextStyle(
+                      color: Color(0xFFF0F2F5),
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
                     ),
-                    Text(
-                      'RealtimeModel.X2_0',
-                      style: TextStyle(color: Color(0x70FFFFFF), fontSize: 8),
+                  ),
+                  Text(
+                    'RealtimeModel.${model.value.replaceAll(RegExp(r'[.-]'), '_')}',
+                    style: const TextStyle(
+                      color: Color(0x70FFFFFF),
+                      fontSize: 8,
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
+            ),
+            if (selected)
               XLabPill(
                 XLabLocalization.shared.text('feed.selected'),
                 color: XLabPalette.mint,
               ),
-            ],
-          ),
+          ],
         ),
-      ],
+      ),
     ),
   );
 }

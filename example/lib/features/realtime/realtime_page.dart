@@ -26,6 +26,7 @@ class RealtimePage extends StatefulWidget {
   const RealtimePage({
     required this.apiKey,
     this.environment = XmaxEnvironment.china,
+    this.model = RealtimeModel.x2_0,
     this.customTrajectory = false,
     this.localInput,
     super.key,
@@ -33,6 +34,7 @@ class RealtimePage extends StatefulWidget {
 
   final String apiKey;
   final XmaxEnvironment environment;
+  final RealtimeModel model;
   final bool customTrajectory;
   final XLabRealtimeLocalInput? localInput;
 
@@ -42,12 +44,6 @@ class RealtimePage extends StatefulWidget {
 
 class _RealtimePageState extends State<RealtimePage>
     with WidgetsBindingObserver {
-  static const _cameraFormat = RealtimeVideoFormat(
-    width: 832,
-    height: 1472,
-    fps: 24,
-  );
-
   late XmaxRealtimeManaging _manager;
   late XmaxStorageManaging _storageManager;
   final _promptController = TextEditingController();
@@ -152,7 +148,7 @@ class _RealtimePageState extends State<RealtimePage>
     );
     _storageManager = client.createStorageManager();
     _manager = client.createRealtimeManager(
-      options: const RealtimeConfiguration(model: RealtimeModel.x2_0),
+      options: RealtimeConfiguration(model: widget.model),
     );
     _manager.setStateListener((state) {
       if (!mounted || _isSuspendedForBackground) return;
@@ -210,7 +206,7 @@ class _RealtimePageState extends State<RealtimePage>
     });
     try {
       final stream = await _manager.createLocalCameraStream(
-        videoFormat: _cameraFormat,
+        videoFormat: widget.model.defaultCameraVideoFormat,
       );
       if (_isCurrentRealtimeOperation(operation)) {
         setState(() => _localStream = stream);

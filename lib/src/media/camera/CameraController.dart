@@ -18,10 +18,10 @@ final class CameraController {
   CameraController({
     required RtcManaging rtcManager,
     PermissionManaging permissionManager = const PermissionManager(),
-    MediaServicing mediaService = const _DefaultMediaService(),
+    MediaServicing? mediaService,
   }) : _rtcManager = rtcManager,
        _permissionManager = permissionManager,
-       _mediaService = mediaService;
+       _mediaService = mediaService ?? MediaService();
 
   static const localVideoTrackID = 'video0';
   static const localStreamID = 'stream-local';
@@ -141,12 +141,4 @@ final class CameraController {
     format.validate();
     return format;
   }
-}
-
-final class _DefaultMediaService implements MediaServicing {
-  const _DefaultMediaService();
-
-  @override
-  Size resolveModelInputSize(Size size) =>
-      MediaService().resolveModelInputSize(size);
 }

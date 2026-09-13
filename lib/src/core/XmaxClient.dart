@@ -6,6 +6,7 @@ import '../service/network/ApiService.dart';
 import '../service/network/ApiServicing.dart';
 import '../service/storage/StorageService.dart';
 import 'realtime/RealtimeConfiguration.dart';
+import 'realtime/RealtimeModel.dart';
 import 'realtime/XmaxRealtimeManager.dart';
 import 'realtime/XmaxRealtimeManaging.dart';
 import 'storage/XmaxStorageManager.dart';
@@ -46,5 +47,7 @@ final class XmaxClient {
     );
   }
 
-  MediaServicing createMediaService() => MediaService();
+  MediaServicing createMediaService({
+    RealtimeModel model = RealtimeModel.x2_0,
+  }) => MediaService(model: model);
 }
