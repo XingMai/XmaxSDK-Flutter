@@ -24,6 +24,17 @@ void main() {
     );
     expect(image.width, 54);
     expect(image.height, 50);
+    expect(
+      find.descendant(
+        of: overlay,
+        matching: find.byWidgetPredicate(
+          (widget) =>
+              widget is Semantics &&
+              widget.properties.label == 'Loading realtime video',
+        ),
+      ),
+      findsOneWidget,
+    );
 
     final background = tester.widget<ColoredBox>(
       find.descendant(of: overlay, matching: find.byType(ColoredBox)),

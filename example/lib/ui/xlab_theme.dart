@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../localization/xlab_localization.dart';
+
 abstract final class XLabPalette {
   static const background = Color(0xFF070A0F);
   static const surface = Color(0xFF111820);
@@ -168,6 +170,7 @@ final class XLabTopBar extends StatelessWidget {
     required this.accent,
     required this.version,
     this.onBack,
+    this.trailing,
     super.key,
   });
 
@@ -175,6 +178,7 @@ final class XLabTopBar extends StatelessWidget {
   final Color accent;
   final String version;
   final VoidCallback? onBack;
+  final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
@@ -186,6 +190,7 @@ final class XLabTopBar extends StatelessWidget {
           if (onBack != null)
             IconButton(
               onPressed: onBack,
+              tooltip: XLabLocalization.shared.text('common.home'),
               icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
             )
           else
@@ -220,6 +225,7 @@ final class XLabTopBar extends StatelessWidget {
             ),
           ),
           XLabPill('v$version', color: accent),
+          ?trailing,
         ],
       ),
     );

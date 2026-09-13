@@ -370,6 +370,11 @@ The same configuration is available in the example's
 
 ## Quick Start
 
+`XmaxConfiguration` uses `XmaxEnvironment.china` by default. For the overseas
+service, set `environment: XmaxEnvironment.global` when creating `XmaxClient`.
+The XLab example follows the selected interface language: Simplified Chinese
+uses China, and English uses Global.
+
 ### Generate and display video
 
 The following Flutter widget creates a camera stream, starts real-time generation,

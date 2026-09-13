@@ -5,6 +5,7 @@ import 'dart:io';
 import '../../foundation/errors/ErrorMessageFormatter.dart';
 import '../../foundation/errors/ErrorNormalizer.dart';
 import '../../foundation/errors/XmaxError.dart';
+import '../../core/XmaxEnvironment.dart';
 import 'ApiLogger.dart';
 import 'ApiServicing.dart';
 
@@ -59,18 +60,24 @@ final class HttpApiTransport implements ApiTransport {
 final class ApiService implements ApiServicing {
   ApiService({
     required String apiKey,
+    XmaxEnvironment environment = XmaxEnvironment.china,
     Uri? baseURL,
     Duration timeout = defaultTimeoutInterval,
     ApiTransport? transport,
   }) : _apiKey = apiKey.trim(),
-       _baseURL = baseURL ?? defaultBaseURL,
+       _baseURL = baseURL ?? _baseURLFor(environment),
        _timeout = timeout,
        _transport = transport ?? HttpApiTransport();
 
-  static final Uri defaultBaseURL = Uri.parse(
-    'https://cloud.xmax.22duck.cn/open/api/v1',
-  );
+  static final Uri defaultBaseURL = _baseURLFor(XmaxEnvironment.china);
   static const Duration defaultTimeoutInterval = Duration(seconds: 15);
+
+  static Uri _baseURLFor(XmaxEnvironment environment) => switch (environment) {
+    XmaxEnvironment.china => Uri.parse(
+      'https://cloud.xmax.22duck.cn/open/api/v1',
+    ),
+    XmaxEnvironment.global => Uri.parse('https://api.xmax.cloud/open/api/v1'),
+  };
 
   final String _apiKey;
   final Uri _baseURL;

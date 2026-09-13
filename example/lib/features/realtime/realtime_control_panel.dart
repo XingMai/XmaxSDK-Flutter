@@ -5,23 +5,26 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../localization/xlab_localization.dart';
+
 const _referenceBackgroundColor = Color(0xFF303032);
 
 enum XLabRealtimeReferenceUploadState { ready, uploading, failed }
 
 enum XLabRealtimePanelMode {
-  character('charx', '换形象', '视频中角色替换成参考图中角色'),
-  clothing('clothx', '换装', '视频中人物衣服替换成参考图中衣服'),
-  style('vibex', '换风格', '视频风格变为参考图指定的风格'),
-  summon('dimx', '虚拟召唤', '指定角色在场景中互动'),
-  touch('mox', '触控动图', '让画面自然动起来'),
-  free('free', '自由', '');
+  character('charx', '视频中角色替换成参考图中角色'),
+  clothing('clothx', '视频中人物衣服替换成参考图中衣服'),
+  style('vibex', '视频风格变为参考图指定的风格'),
+  summon('dimx', '指定角色在场景中互动'),
+  touch('mox', '让画面自然动起来'),
+  free('free', '');
 
-  const XLabRealtimePanelMode(this.id, this.label, this.prompt);
+  const XLabRealtimePanelMode(this.id, this.prompt);
 
   final String id;
-  final String label;
   final String prompt;
+
+  String get label => XLabLocalization.shared.text('category.$id');
 
   bool get usesReferences => switch (this) {
     character || clothing || style || summon => true,
@@ -146,6 +149,9 @@ final class XLabRealtimeControlPanel extends StatelessWidget {
                       height: 36,
                       child: IconButton(
                         padding: EdgeInsets.zero,
+                        tooltip: XLabLocalization.shared.text(
+                          'realtime.generation.stop',
+                        ),
                         onPressed: generating && !busy ? onStop : null,
                         icon: Icon(
                           Icons.block,
@@ -251,7 +257,13 @@ final class XLabRealtimeControlPanel extends StatelessWidget {
               ),
             ),
             onPressed: generating || busy ? null : onTouchStart,
-            child: Text(generating ? '在画面上拖拽，用轨迹控制角色' : '点击开始生成'),
+            child: Text(
+              XLabLocalization.shared.text(
+                generating
+                    ? 'realtime.generation.drag'
+                    : 'realtime.generation.start',
+              ),
+            ),
           ),
         ),
       );
@@ -275,19 +287,35 @@ final class XLabRealtimeControlPanel extends StatelessWidget {
                 onTapOutside: (_) =>
                     FocusManager.instance.primaryFocus?.unfocus(),
                 style: const TextStyle(color: Colors.white, fontSize: 13),
-                decoration: const InputDecoration.collapsed(
-                  hintText: '输入你想要的效果',
-                  hintStyle: TextStyle(color: Color(0x80FFFFFF), fontSize: 13),
+                decoration: InputDecoration.collapsed(
+                  hintText: XLabLocalization.shared.text(
+                    'realtime.prompt.placeholder',
+                  ),
+                  hintStyle: const TextStyle(
+                    color: Color(0x80FFFFFF),
+                    fontSize: 13,
+                  ),
                 ),
               ),
             ),
             const SizedBox(width: 10),
             _CircleAction(
               tooltip: switch (promptReference?.uploadState) {
-                null => '添加参考图',
-                XLabRealtimeReferenceUploadState.uploading => '正在上传参考图',
-                XLabRealtimeReferenceUploadState.failed => '重试上传参考图',
-                XLabRealtimeReferenceUploadState.ready => '移除参考图',
+                null => XLabLocalization.shared.text(
+                  'realtime.reference.prompt.add',
+                ),
+                XLabRealtimeReferenceUploadState.uploading =>
+                  XLabLocalization.shared.text(
+                    'realtime.reference.prompt.uploading',
+                  ),
+                XLabRealtimeReferenceUploadState.failed =>
+                  XLabLocalization.shared.text(
+                    'realtime.reference.prompt.retry',
+                  ),
+                XLabRealtimeReferenceUploadState.ready =>
+                  XLabLocalization.shared.text(
+                    'realtime.reference.prompt.delete',
+                  ),
               },
               backgroundColor: const Color(0x1FFFFFFF),
               disabledOpacity: 1,
@@ -303,7 +331,7 @@ final class XLabRealtimeControlPanel extends StatelessWidget {
             ),
             const SizedBox(width: 8),
             _CircleAction(
-              tooltip: '提交自定义模式描述',
+              tooltip: XLabLocalization.shared.text('realtime.prompt.submit'),
               backgroundColor: const Color(0xFFFF2E88),
               onPressed:
                   busy ||
@@ -482,11 +510,22 @@ final class _AddReferenceButton extends StatelessWidget {
         color: _referenceBackgroundColor,
         borderRadius: BorderRadius.circular(9),
       ),
-      child: const Column(
+      child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: <Widget>[
-          Icon(Icons.add, color: Colors.white, size: 19),
-          Text('参考图', style: TextStyle(color: Colors.white, fontSize: 9)),
+          const Icon(Icons.add, color: Colors.white, size: 19),
+          SizedBox(
+            width: 40,
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                XLabLocalization.shared.text('realtime.reference.label'),
+                maxLines: 1,
+                softWrap: false,
+                style: const TextStyle(color: Colors.white, fontSize: 9),
+              ),
+            ),
+          ),
         ],
       ),
     ),

@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:xmax_sdk/xmax_sdk.dart';
 
+import '../../localization/xlab_localization.dart';
 import '../../ui/xlab_theme.dart';
 import '../realtime/realtime_local_input.dart';
 import '../realtime/realtime_page.dart';
@@ -24,9 +25,6 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   static const _apiKeyStorageKey = 'xlab.realtime.apiKey';
   static const _isImagePipelineEnabled = false;
-  static final _apiKeyApplicationURL = Uri.parse(
-    'https://platform.xmaxai.com/api-keys',
-  );
   final _apiKeyController = TextEditingController();
   final _preferences = SharedPreferencesAsync();
   bool _obscureApiKey = true;
@@ -55,7 +53,7 @@ class _HomePageState extends State<HomePage> {
   Future<void> _openAPIKeyApplicationPage() async {
     try {
       final opened = await launchUrl(
-        _apiKeyApplicationURL,
+        XLabLocalization.shared.apiKeyApplicationURL,
         mode: LaunchMode.externalApplication,
       );
       if (opened || !mounted) {
@@ -66,9 +64,11 @@ class _HomePageState extends State<HomePage> {
         return;
       }
     }
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('无法打开 Xmax 开放平台')));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(XLabLocalization.shared.text('feed.api.openError')),
+      ),
+    );
   }
 
   @override
@@ -80,21 +80,26 @@ class _HomePageState extends State<HomePage> {
   String? _apiKeyForNavigation() {
     final apiKey = _apiKeyController.text.trim();
     if (apiKey.isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('请先输入 API Key')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(XLabLocalization.shared.text('feed.api.required')),
+        ),
+      );
       return null;
     }
     unawaited(_preferences.setString(_apiKeyStorageKey, apiKey));
     return apiKey;
   }
 
-  void _open(Widget Function(String apiKey) builder) {
+  void _open(
+    Widget Function(String apiKey, XmaxEnvironment environment) builder,
+  ) {
     final apiKey = _apiKeyForNavigation();
     if (apiKey == null) return;
-    Navigator.of(
-      context,
-    ).push(MaterialPageRoute<void>(builder: (_) => builder(apiKey)));
+    final environment = XLabLocalization.shared.environment;
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (_) => builder(apiKey, environment)),
+    );
   }
 
   Future<void> _openImagePipeline() async {
@@ -117,6 +122,7 @@ class _HomePageState extends State<HomePage> {
         MaterialPageRoute<void>(
           builder: (_) => RealtimePage(
             apiKey: apiKey,
+            environment: XLabLocalization.shared.environment,
             localInput: XLabRealtimeImageInput(
               path: image.path,
               name: image.name,
@@ -126,9 +132,11 @@ class _HomePageState extends State<HomePage> {
       );
     } catch (_) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('读取图片失败，请重试')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(XLabLocalization.shared.text('feed.image.error')),
+        ),
+      );
     } finally {
       _isPickingImage = false;
     }
@@ -136,6 +144,11 @@ class _HomePageState extends State<HomePage> {
 
   @override
   Widget build(BuildContext context) {
+    // Depend on MaterialApp's locale so changing language refreshes this page.
+    Localizations.localeOf(context);
+    final localization = XLabLocalization.shared;
+    String t(String key) => localization.text(key);
+
     return Scaffold(
       body: XLabBackground(
         child: SafeArea(
@@ -143,89 +156,114 @@ class _HomePageState extends State<HomePage> {
             keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
             padding: const EdgeInsets.fromLTRB(18, 20, 18, 32),
             children: <Widget>[
-              const XLabTopBar(
+              XLabTopBar(
                 title: 'XLAB',
                 accent: XLabPalette.mint,
                 version: XmaxSDKInfo.version,
+                trailing: PopupMenuButton<XLabLanguage>(
+                  key: const ValueKey<String>('language-menu'),
+                  tooltip: '语言 / Language',
+                  icon: const Icon(Icons.language, color: XLabPalette.mint),
+                  onSelected: (language) =>
+                      unawaited(localization.setLanguage(language)),
+                  itemBuilder: (_) => XLabLanguage.values
+                      .map(
+                        (language) => CheckedPopupMenuItem<XLabLanguage>(
+                          value: language,
+                          checked: localization.language == language,
+                          child: Text(localization.languageTitle(language)),
+                        ),
+                      )
+                      .toList(),
+                ),
               ),
               const SizedBox(height: 34),
               _hero(),
               const SizedBox(height: 12),
               Row(
                 children: <Widget>[
-                  const Expanded(
-                    child: _Metric(label: 'RUNTIME', value: 'Flutter'),
+                  Expanded(
+                    child: _Metric(label: t('feed.runtime'), value: 'Flutter'),
                   ),
                   const SizedBox(width: 8),
                   Expanded(
-                    child: _Metric(label: 'MIN OS', value: _minimumOS),
+                    child: _Metric(label: t('feed.os'), value: _minimumOS),
                   ),
                   const SizedBox(width: 8),
-                  const Expanded(
-                    child: _Metric(label: 'LATEST MODEL', value: 'X2.0'),
+                  Expanded(
+                    child: _Metric(label: t('feed.latestModel'), value: 'X2.0'),
                   ),
                 ],
               ),
               const SizedBox(height: 14),
               _modelRegistry(),
               const SizedBox(height: 30),
-              const _SectionHeader(
-                title: 'GENERATION PIPELINES',
-                subtitle: '选择一种内容输入方式',
+              _SectionHeader(
+                title: t('feed.pipelines'),
+                subtitle: t('feed.input'),
               ),
               const SizedBox(height: 14),
               _PipelineCard(
                 sequence: '01',
                 mode: 'MODE_01 / CAMERA',
-                title: '摄像头实时流',
-                subtitle: '实时采集摄像头画面，持续驱动视频生成。',
+                title: t('feed.camera.title'),
+                subtitle: t('feed.camera.subtitle'),
                 capability: 'createLocalCameraStream()',
                 color: XLabPalette.mint,
-                onTap: () => _open((apiKey) => RealtimePage(apiKey: apiKey)),
+                onTap: () => _open(
+                  (apiKey, environment) =>
+                      RealtimePage(apiKey: apiKey, environment: environment),
+                ),
               ),
               if (_isImagePipelineEnabled) ...<Widget>[
                 const SizedBox(height: 14),
                 _PipelineCard(
                   sequence: '03',
                   mode: 'MODE_03 / IMAGE.FILE',
-                  title: '图片生成管线',
-                  subtitle: '选择本地图片，让静态画面持续流动起来。',
+                  title: t('feed.image.title'),
+                  subtitle: t('feed.image.subtitle'),
                   capability: 'createLocalImageStream()',
                   color: XLabPalette.purple,
                   onTap: () => unawaited(_openImagePipeline()),
                 ),
               ],
               const SizedBox(height: 30),
-              const _SectionHeader(
-                title: 'SDK FEATURES',
-                subtitle: '更多能力与接入示例',
+              _SectionHeader(
+                title: t('feed.features'),
+                subtitle: t('feed.examples'),
               ),
               const SizedBox(height: 14),
               _FeatureCard(
                 category: 'SDK RENDERING / TRAJECTORY',
                 watermark: 'FX',
-                title: '自定义轨迹渲染',
-                subtitle: '使用自定义 Renderer 绘制交互轨迹。',
+                title: t('feed.render.title'),
+                subtitle: t('feed.render.subtitle'),
                 tags: const <String>['CANVAS', 'MULTI-TOUCH', 'CUSTOM EFFECT'],
                 color: XLabPalette.pink,
                 icon: Icons.gesture_rounded,
                 iconLabel: 'RENDER',
                 onTap: () => _open(
-                  (apiKey) =>
-                      RealtimePage(apiKey: apiKey, customTrajectory: true),
+                  (apiKey, environment) => RealtimePage(
+                    apiKey: apiKey,
+                    environment: environment,
+                    customTrajectory: true,
+                  ),
                 ),
               ),
               const SizedBox(height: 14),
               _FeatureCard(
                 category: 'SDK SERVICE / STORAGE',
                 watermark: 'URL',
-                title: '存储服务',
-                subtitle: '上传图片或视频，获取可复用的远程地址。',
+                title: t('feed.storage.title'),
+                subtitle: t('feed.storage.subtitle'),
                 tags: const <String>['IMAGE', 'VIDEO', 'REMOTE URL'],
                 color: XLabPalette.orange,
                 icon: Icons.cloud_upload_outlined,
                 iconLabel: 'UPLOAD',
-                onTap: () => _open((apiKey) => StoragePage(apiKey: apiKey)),
+                onTap: () => _open(
+                  (apiKey, environment) =>
+                      StoragePage(apiKey: apiKey, environment: environment),
+                ),
               ),
               const SizedBox(height: 38),
               const Center(
@@ -255,18 +293,18 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Widget _hero() => const XLabCard(
+  Widget _hero() => XLabCard(
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
         Row(
           children: <Widget>[
-            SizedBox(
+            const SizedBox(
               width: 22,
               child: Divider(color: XLabPalette.mint, thickness: 2),
             ),
-            SizedBox(width: 8),
-            Text(
+            const SizedBox(width: 8),
+            const Text(
               'XMAX PLAYGROUND',
               style: TextStyle(
                 color: XLabPalette.mint,
@@ -277,18 +315,18 @@ class _HomePageState extends State<HomePage> {
             ),
           ],
         ),
-        SizedBox(height: 18),
+        const SizedBox(height: 18),
         Text(
-          '实时交互视频模型',
+          XLabLocalization.shared.text('feed.hero.title'),
           style: TextStyle(
             color: XLabPalette.primaryText,
             fontSize: 26,
             fontWeight: FontWeight.w800,
           ),
         ),
-        SizedBox(height: 10),
+        const SizedBox(height: 10),
         Text(
-          '使用摄像头输入，启动 XmaxSDK 流式生成链路',
+          XLabLocalization.shared.text('feed.hero.subtitle'),
           style: TextStyle(color: Color(0xFF91A0B2), fontSize: 12),
         ),
       ],
@@ -300,11 +338,11 @@ class _HomePageState extends State<HomePage> {
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        const Row(
+        Row(
           children: <Widget>[
             Expanded(
               child: Text(
-                '选择你的模型',
+                XLabLocalization.shared.text('feed.model.title'),
                 style: TextStyle(
                   color: Color(0xFFE9EDF3),
                   fontSize: 15,
@@ -313,7 +351,7 @@ class _HomePageState extends State<HomePage> {
               ),
             ),
             Text(
-              '1 MODEL',
+              XLabLocalization.shared.formatCount('feed.model.count', 1),
               style: TextStyle(
                 color: Color(0x70FFFFFF),
                 fontSize: 8,
@@ -360,7 +398,9 @@ class _HomePageState extends State<HomePage> {
                     fontSize: 12,
                   ),
                   decoration: InputDecoration(
-                    hintText: '输入 Xmax API Key',
+                    hintText: XLabLocalization.shared.text(
+                      'feed.api.placeholder',
+                    ),
                     hintStyle: const TextStyle(
                       color: Color(0x80607080),
                       fontSize: 12,
@@ -387,6 +427,9 @@ class _HomePageState extends State<HomePage> {
                     ),
                     suffixIcon: IconButton(
                       padding: EdgeInsets.zero,
+                      tooltip: XLabLocalization.shared.text(
+                        _obscureApiKey ? 'feed.api.show' : 'feed.api.hide',
+                      ),
                       onPressed: () =>
                           setState(() => _obscureApiKey = !_obscureApiKey),
                       icon: Icon(
@@ -403,8 +446,8 @@ class _HomePageState extends State<HomePage> {
               const SizedBox(height: 7),
               Row(
                 children: <Widget>[
-                  const Text(
-                    '还没有 API Key？',
+                  Text(
+                    XLabLocalization.shared.text('feed.api.prompt'),
                     style: TextStyle(color: Color(0x99708090), fontSize: 9),
                   ),
                   const SizedBox(width: 4),
@@ -422,7 +465,9 @@ class _HomePageState extends State<HomePage> {
                         visualDensity: VisualDensity.compact,
                         textStyle: const TextStyle(fontSize: 9),
                       ),
-                      child: const Text('前往 Xmax 开放平台申请'),
+                      child: Text(
+                        XLabLocalization.shared.text('feed.api.link'),
+                      ),
                     ),
                   ),
                 ],
@@ -438,7 +483,7 @@ class _HomePageState extends State<HomePage> {
             color: XLabPalette.mint.withValues(alpha: 0.06),
             borderRadius: BorderRadius.circular(10),
           ),
-          child: const Row(
+          child: Row(
             children: <Widget>[
               Text('◆', style: TextStyle(color: XLabPalette.mint, fontSize: 8)),
               SizedBox(width: 10),
@@ -462,7 +507,10 @@ class _HomePageState extends State<HomePage> {
                   ],
                 ),
               ),
-              XLabPill('ACTIVE', color: XLabPalette.mint),
+              XLabPill(
+                XLabLocalization.shared.text('feed.selected'),
+                color: XLabPalette.mint,
+              ),
             ],
           ),
         ),
@@ -595,7 +643,10 @@ final class _PipelineCard extends StatelessWidget {
                     ),
                   ),
                 ),
-                XLabPill('READY', color: color),
+                XLabPill(
+                  XLabLocalization.shared.text('feed.ready'),
+                  color: color,
+                ),
               ],
             ),
             const SizedBox(height: 17),
@@ -650,8 +701,8 @@ final class _PipelineCard extends StatelessWidget {
                     color: color,
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  child: const Text(
-                    '运行',
+                  child: Text(
+                    XLabLocalization.shared.text('feed.run'),
                     style: TextStyle(
                       color: Color(0xFF08110E),
                       fontSize: 11,
@@ -840,8 +891,8 @@ final class _FeatureCard extends StatelessWidget {
                       color: color,
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    child: const Text(
-                      '进入',
+                    child: Text(
+                      XLabLocalization.shared.text('feed.open'),
                       style: TextStyle(
                         color: Color(0xFF08110E),
                         fontSize: 11,
@@ -889,7 +940,7 @@ final class _FeatureAvailablePill extends StatelessWidget {
       border: Border.all(color: const Color(0x2EFFFFFF)),
     ),
     child: Text(
-      'AVAILABLE',
+      XLabLocalization.shared.text('feed.available'),
       style: TextStyle(
         color: color,
         fontSize: 8,

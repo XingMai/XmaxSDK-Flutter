@@ -10,6 +10,7 @@ export 'src/core/storage/XmaxStorageProgressHandler.dart';
 export 'src/core/storage/XmaxUploadedFile.dart' show XmaxUploadedFile;
 export 'src/core/XmaxConfiguration.dart';
 export 'src/core/XmaxClient.dart';
+export 'src/core/XmaxEnvironment.dart';
 export 'src/foundation/errors/XmaxError.dart';
 export 'src/foundation/logging/XmaxLoggerOption.dart';
 export 'src/foundation/media/camera/CameraPosition.dart';

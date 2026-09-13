@@ -5,6 +5,7 @@ import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:xmax_sdk/xmax_sdk.dart';
 
+import '../../localization/xlab_localization.dart';
 import 'realtime_control_panel.dart';
 import 'realtime_camera_switch_transition.dart';
 import 'realtime_loading_overlay.dart';
@@ -24,12 +25,14 @@ XLabRealtimePanelMode initialRealtimePanelMode({
 class RealtimePage extends StatefulWidget {
   const RealtimePage({
     required this.apiKey,
+    this.environment = XmaxEnvironment.china,
     this.customTrajectory = false,
     this.localInput,
     super.key,
   });
 
   final String apiKey;
+  final XmaxEnvironment environment;
   final bool customTrajectory;
   final XLabRealtimeLocalInput? localInput;
 
@@ -143,6 +146,7 @@ class _RealtimePageState extends State<RealtimePage>
     final client = XmaxClient(
       configuration: XmaxConfiguration(
         apiKey: widget.apiKey,
+        environment: widget.environment,
         loggerOptions: XmaxLoggerOption.all,
       ),
     );
@@ -183,9 +187,11 @@ class _RealtimePageState extends State<RealtimePage>
           !_isSuspendedForBackground &&
           alarm.status == RealtimePerformanceStatus.limited) {
         setState(() {
-          _lastError = const XmaxError(
+          _lastError = XmaxError(
             code: XmaxErrorCode.mediaError,
-            message: '设备性能受限，实时画质可能下降',
+            message: XLabLocalization.shared.text(
+              'realtime.performance.limited',
+            ),
           );
         });
       }
@@ -359,16 +365,14 @@ class _RealtimePageState extends State<RealtimePage>
 
     if (forPrompt && _handlePromptReferenceAction()) return;
 
-    const images = XTypeGroup(
-      label: '参考图',
+    final images = XTypeGroup(
+      label: XLabLocalization.shared.text('realtime.reference.label'),
       extensions: <String>['jpg', 'jpeg', 'png', 'webp'],
       uniformTypeIdentifiers: <String>['public.image'],
       mimeTypes: <String>['image/*'],
     );
     try {
-      final file = await openFile(
-        acceptedTypeGroups: const <XTypeGroup>[images],
-      );
+      final file = await openFile(acceptedTypeGroups: <XTypeGroup>[images]);
       if (file == null || !mounted) return;
 
       final bytes = await file.readAsBytes();
@@ -621,6 +625,7 @@ class _RealtimePageState extends State<RealtimePage>
 
   @override
   Widget build(BuildContext context) {
+    Localizations.localeOf(context);
     final generating =
         _state.connectionState == RealtimeConnectionState.generating;
     final localImage = switch (widget.localInput) {
@@ -721,7 +726,7 @@ class _RealtimePageState extends State<RealtimePage>
                     width: 44,
                     height: 44,
                     child: IconButton(
-                      tooltip: '返回首页',
+                      tooltip: XLabLocalization.shared.text('common.home'),
                       padding: EdgeInsets.zero,
                       onPressed: () => Navigator.of(context).pop(),
                       icon: const Icon(
@@ -794,33 +799,20 @@ final class _CameraActionButton extends StatelessWidget {
   Widget build(BuildContext context) => SizedBox(
     width: 58,
     height: 62,
-    child: InkResponse(
-      onTap: enabled ? onPressed : null,
-      radius: 29,
-      child: Opacity(
-        opacity: enabled ? 1 : 0.45,
-        child: const Column(
-          children: <Widget>[
-            SizedBox(height: 9),
-            Icon(
-              Icons.sync_rounded,
-              color: Colors.white,
-              size: 22,
-              shadows: <Shadow>[
-                Shadow(
-                  color: Colors.black54,
-                  blurRadius: 2,
-                  offset: Offset(0, 1),
-                ),
-              ],
-            ),
-            SizedBox(height: 5),
-            Text(
-              '翻转',
-              style: TextStyle(
+    child: Tooltip(
+      message: XLabLocalization.shared.text('realtime.flipCamera'),
+      child: InkResponse(
+        onTap: enabled ? onPressed : null,
+        radius: 29,
+        child: Opacity(
+          opacity: enabled ? 1 : 0.45,
+          child: Column(
+            children: <Widget>[
+              const SizedBox(height: 9),
+              const Icon(
+                Icons.sync_rounded,
                 color: Colors.white,
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
+                size: 22,
                 shadows: <Shadow>[
                   Shadow(
                     color: Colors.black54,
@@ -829,8 +821,24 @@ final class _CameraActionButton extends StatelessWidget {
                   ),
                 ],
               ),
-            ),
-          ],
+              const SizedBox(height: 5),
+              Text(
+                XLabLocalization.shared.text('realtime.flip'),
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  shadows: <Shadow>[
+                    Shadow(
+                      color: Colors.black54,
+                      blurRadius: 2,
+                      offset: Offset(0, 1),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     ),

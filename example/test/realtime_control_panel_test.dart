@@ -4,6 +4,62 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:xmax_sdk_example/features/realtime/realtime_control_panel.dart';
 
 void main() {
+  setUp(() {
+    TestWidgetsFlutterBinding.ensureInitialized()
+        .platformDispatcher
+        .localeTestValue = const Locale(
+      'zh',
+    );
+  });
+  tearDown(() {
+    TestWidgetsFlutterBinding.ensureInitialized().platformDispatcher
+        .clearLocaleTestValue();
+  });
+
+  testWidgets('translates realtime controls and reference actions', (
+    tester,
+  ) async {
+    tester.binding.platformDispatcher.localeTestValue = const Locale('en');
+    final controller = TextEditingController();
+    addTearDown(controller.dispose);
+
+    Future<void> show(XLabRealtimePanelMode mode) => tester.pumpWidget(
+      _TestApp(
+        child: XLabRealtimeControlPanel(
+          mode: mode,
+          generating: false,
+          busy: false,
+          promptController: controller,
+          referencesByCategory: const <String, List<XLabRealtimeReference>>{},
+          selectedReference: null,
+          onModeChanged: (_) {},
+          onStop: () {},
+          onReferenceChanged: (_) {},
+          onAddReference: () {},
+          onTouchStart: () {},
+          onPromptSubmit: () {},
+          onPromptReference: () {},
+        ),
+      ),
+    );
+
+    await show(XLabRealtimePanelMode.character);
+    expect(find.text('Character'), findsOneWidget);
+    expect(find.text('Reference'), findsOneWidget);
+    expect(find.byTooltip('Stop generation'), findsOneWidget);
+
+    await show(XLabRealtimePanelMode.touch);
+    expect(find.text('Tap to generate'), findsOneWidget);
+
+    await show(XLabRealtimePanelMode.free);
+    expect(find.byTooltip('Add a custom-mode reference image'), findsOneWidget);
+    expect(find.byTooltip('Submit custom prompt'), findsOneWidget);
+    expect(
+      tester.widget<TextField>(find.byType(TextField)).decoration?.hintText,
+      'Describe the effect you want',
+    );
+  });
+
   testWidgets('reference selection and prompt submission provide haptics', (
     tester,
   ) async {

@@ -28,6 +28,30 @@ void main() {
     expect(utf8.decode(transport.body!), '{"model":"x2.0"}');
   });
 
+  test('ApiService routes global environment to the overseas API', () async {
+    final transport = _FakeTransport(
+      response: ApiTransportResponse(
+        statusCode: 200,
+        body: utf8.encode('{"success":true,"data":{}}'),
+      ),
+    );
+    final service = ApiService(
+      apiKey: 'key',
+      environment: XmaxEnvironment.global,
+      transport: transport,
+    );
+
+    await service.get<Map<String, dynamic>>(
+      '/session',
+      (json) => json! as Map<String, dynamic>,
+    );
+
+    expect(
+      transport.url.toString(),
+      'https://api.xmax.cloud/open/api/v1/session',
+    );
+  });
+
   test('ApiService maps failed envelope to apiError', () async {
     final service = ApiService(
       apiKey: 'key',

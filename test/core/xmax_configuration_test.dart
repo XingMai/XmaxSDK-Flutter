@@ -6,7 +6,19 @@ void main() {
     final configuration = XmaxConfiguration(apiKey: '  key-123 \n');
 
     expect(configuration.apiKey, 'key-123');
+    expect(configuration.environment, XmaxEnvironment.china);
     expect(configuration.validate, returnsNormally);
+  });
+
+  test('XmaxEnvironment matches iOS service regions', () {
+    expect(XmaxEnvironment.values, <XmaxEnvironment>[
+      XmaxEnvironment.china,
+      XmaxEnvironment.global,
+    ]);
+    expect(
+      XmaxConfiguration(apiKey: 'key', environment: XmaxEnvironment.global),
+      isNot(XmaxConfiguration(apiKey: 'key')),
+    );
   });
 
   test('XmaxConfiguration rejects an empty API key', () {

@@ -15,7 +15,10 @@ import 'XmaxConfiguration.dart';
 /// SDK 的统一入口，负责创建实时、存储和媒体服务组件。
 final class XmaxClient {
   XmaxClient({required this.configuration})
-    : _apiService = ApiService(apiKey: configuration.apiKey) {
+    : _apiService = ApiService(
+        apiKey: configuration.apiKey,
+        environment: configuration.environment,
+      ) {
     XmaxLogger.configure(options: configuration.loggerOptions);
   }
 

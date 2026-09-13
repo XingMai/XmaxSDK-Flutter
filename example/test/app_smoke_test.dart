@@ -10,6 +10,7 @@ void main() {
     SharedPreferencesAsyncPlatform.instance =
         InMemorySharedPreferencesAsync.withData(<String, Object>{
           'xlab.realtime.apiKey': 'cached-api-key',
+          'xlab.language': 'zh-Hans',
         });
     addTearDown(() => SharedPreferencesAsyncPlatform.instance = null);
     await tester.pumpWidget(const XLabApp());

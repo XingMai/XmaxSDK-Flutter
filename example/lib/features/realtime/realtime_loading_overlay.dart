@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../localization/xlab_localization.dart';
+
 /// Covers the realtime preview while local or generated video is loading.
 final class RealtimeLoadingOverlay extends StatefulWidget {
   const RealtimeLoadingOverlay({required this.isLoading, super.key});
@@ -79,7 +81,7 @@ final class _RealtimeLoadingOverlayState extends State<RealtimeLoadingOverlay>
           color: Colors.black.withValues(alpha: 0.72),
           child: Center(
             child: Semantics(
-              label: '正在加载实时画面',
+              label: XLabLocalization.shared.text('realtime.loading'),
               child: Image.asset(
                 'assets/realtime_loading.gif',
                 width: 54,

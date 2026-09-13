@@ -8,14 +8,20 @@ import 'package:flutter/services.dart';
 import 'package:video_player/video_player.dart';
 import 'package:xmax_sdk/xmax_sdk.dart';
 
+import '../../localization/xlab_localization.dart';
 import '../../ui/xlab_theme.dart';
 
 const _orange = XLabPalette.orange;
 
 class StoragePage extends StatefulWidget {
-  const StoragePage({required this.apiKey, super.key});
+  const StoragePage({
+    required this.apiKey,
+    this.environment = XmaxEnvironment.china,
+    super.key,
+  });
 
   final String apiKey;
+  final XmaxEnvironment environment;
 
   @override
   State<StoragePage> createState() => _StoragePageState();
@@ -23,7 +29,10 @@ class StoragePage extends StatefulWidget {
 
 class _StoragePageState extends State<StoragePage> {
   late final XmaxStorageManaging _storageManager = XmaxClient(
-    configuration: XmaxConfiguration(apiKey: widget.apiKey),
+    configuration: XmaxConfiguration(
+      apiKey: widget.apiKey,
+      environment: widget.environment,
+    ),
   ).createStorageManager();
   final _scrollController = ScrollController();
 
@@ -44,8 +53,8 @@ class _StoragePageState extends State<StoragePage> {
   Future<void> _pick() async {
     if (_picking || _uploading) return;
 
-    const mediaTypes = XTypeGroup(
-      label: '图片或视频',
+    final mediaTypes = XTypeGroup(
+      label: XLabLocalization.shared.text('storage.select'),
       extensions: <String>[
         'jpg',
         'jpeg',
@@ -61,9 +70,7 @@ class _StoragePageState extends State<StoragePage> {
     );
 
     try {
-      final file = await openFile(
-        acceptedTypeGroups: const <XTypeGroup>[mediaTypes],
-      );
+      final file = await openFile(acceptedTypeGroups: <XTypeGroup>[mediaTypes]);
       if (file == null || !mounted) return;
 
       final extension = file.name.split('.').last.toLowerCase();
@@ -82,7 +89,11 @@ class _StoragePageState extends State<StoragePage> {
         await _selectVideo(file, selectionVersion: selectionVersion);
       }
     } catch (_) {
-      if (mounted) setState(() => _error = '读取文件失败，请重试');
+      if (mounted) {
+        setState(
+          () => _error = XLabLocalization.shared.text('storage.file.error'),
+        );
+      }
     }
   }
 
@@ -163,7 +174,7 @@ class _StoragePageState extends State<StoragePage> {
       if (mounted && selectionVersion == _selectionVersion) {
         setState(() {
           _picking = false;
-          _error = '读取视频失败，请重试';
+          _error = XLabLocalization.shared.text('storage.video.error');
         });
       }
     }
@@ -216,7 +227,7 @@ class _StoragePageState extends State<StoragePage> {
         setState(() {
           _error = error is XmaxError
               ? error.message
-              : '上传失败，请检查 API Key 和网络后重试';
+              : XLabLocalization.shared.text('storage.upload.error');
         });
       }
     } finally {
@@ -247,9 +258,9 @@ class _StoragePageState extends State<StoragePage> {
 
     await Clipboard.setData(ClipboardData(text: url.toString()));
     if (mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('地址已复制')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(XLabLocalization.shared.text('storage.copied'))),
+      );
     }
   }
 
@@ -262,45 +273,48 @@ class _StoragePageState extends State<StoragePage> {
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    body: XLabBackground(
-      accent: _orange,
-      child: SafeArea(
-        child: Column(
-          children: <Widget>[
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 10),
-              child: XLabTopBar(
-                title: '存储服务',
-                accent: _orange,
-                version: XmaxSDKInfo.version,
-                onBack: () => Navigator.of(context).pop(),
+  Widget build(BuildContext context) {
+    Localizations.localeOf(context);
+    return Scaffold(
+      body: XLabBackground(
+        accent: _orange,
+        child: SafeArea(
+          child: Column(
+            children: <Widget>[
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                child: XLabTopBar(
+                  title: XLabLocalization.shared.text('feed.storage.title'),
+                  accent: _orange,
+                  version: XmaxSDKInfo.version,
+                  onBack: () => Navigator.of(context).pop(),
+                ),
               ),
-            ),
-            Expanded(
-              child: ListView(
-                controller: _scrollController,
-                padding: const EdgeInsets.fromLTRB(18, 12, 18, 32),
-                children: <Widget>[
-                  _overview(),
-                  const SizedBox(height: 14),
-                  _fileCard(),
-                  if (_error != null) ...<Widget>[
-                    const SizedBox(height: 12),
-                    _errorView(),
-                  ],
-                  if (_uploadedURL != null) ...<Widget>[
+              Expanded(
+                child: ListView(
+                  controller: _scrollController,
+                  padding: const EdgeInsets.fromLTRB(18, 12, 18, 32),
+                  children: <Widget>[
+                    _overview(),
                     const SizedBox(height: 14),
-                    _resultCard(),
+                    _fileCard(),
+                    if (_error != null) ...<Widget>[
+                      const SizedBox(height: 12),
+                      _errorView(),
+                    ],
+                    if (_uploadedURL != null) ...<Widget>[
+                      const SizedBox(height: 14),
+                      _resultCard(),
+                    ],
                   ],
-                ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
-    ),
-  );
+    );
+  }
 
   Widget _overview() => XLabCard(
     accent: _orange,
@@ -309,17 +323,17 @@ class _StoragePageState extends State<StoragePage> {
       colors: <Color>[Color(0xF01D1711), Color(0xE80F1115)],
     ),
     borderColor: _orange.withValues(alpha: 0.24),
-    child: const Column(
+    child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
         Row(
           children: <Widget>[
-            Icon(Icons.circle, color: _orange, size: 6),
-            SizedBox(width: 7),
+            const Icon(Icons.circle, color: _orange, size: 6),
+            const SizedBox(width: 7),
             Expanded(
               child: Text(
-                'STORAGE PIPELINE',
-                style: TextStyle(
+                XLabLocalization.shared.text('storage.pipeline'),
+                style: const TextStyle(
                   color: _orange,
                   fontSize: 9,
                   fontWeight: FontWeight.w800,
@@ -327,25 +341,32 @@ class _StoragePageState extends State<StoragePage> {
                 ),
               ),
             ),
-            XLabPill('READY', color: _orange),
+            XLabPill(
+              XLabLocalization.shared.text('feed.ready'),
+              color: _orange,
+            ),
           ],
         ),
-        SizedBox(height: 13),
+        const SizedBox(height: 13),
         Text(
-          '把本地媒体交给 XmaxSDK',
-          style: TextStyle(
+          XLabLocalization.shared.text('storage.hero.title'),
+          style: const TextStyle(
             color: Color(0xFFF4EEE6),
             fontSize: 18,
             fontWeight: FontWeight.w800,
           ),
         ),
-        SizedBox(height: 7),
+        const SizedBox(height: 7),
         Text(
-          '选择图片或视频，上传后获取可直接使用的远程地址。',
-          style: TextStyle(color: Color(0xFF8E8377), fontSize: 10, height: 1.7),
+          XLabLocalization.shared.text('storage.hero.subtitle'),
+          style: const TextStyle(
+            color: Color(0xFF8E8377),
+            fontSize: 10,
+            height: 1.7,
+          ),
         ),
-        SizedBox(height: 15),
-        _PipelineLabels(),
+        const SizedBox(height: 15),
+        const _PipelineLabels(),
       ],
     ),
   );
@@ -364,10 +385,10 @@ class _StoragePageState extends State<StoragePage> {
           children: <Widget>[
             const _StepPill('01'),
             const SizedBox(width: 9),
-            const Expanded(
+            Expanded(
               child: Text(
-                '文件预览',
-                style: TextStyle(
+                XLabLocalization.shared.text('storage.preview'),
+                style: const TextStyle(
                   color: Color(0xFFF2ECE4),
                   fontSize: 13.5,
                   fontWeight: FontWeight.w700,
@@ -376,7 +397,7 @@ class _StoragePageState extends State<StoragePage> {
             ),
             if (_file != null)
               _CompactOutlineButton(
-                label: '重新上传',
+                label: XLabLocalization.shared.text('storage.reselect'),
                 enabled: !_picking && !_uploading,
                 onPressed: _pick,
               ),
@@ -384,9 +405,9 @@ class _StoragePageState extends State<StoragePage> {
         ),
         if (_file != null && !_isImage) ...<Widget>[
           const SizedBox(height: 10),
-          const Text(
-            '视频生成暂不支持安全检测',
-            style: TextStyle(color: Color(0xFF596678), fontSize: 9),
+          Text(
+            XLabLocalization.shared.text('storage.safety.unsupported'),
+            style: const TextStyle(color: Color(0xFF596678), fontSize: 9),
           ),
         ],
         const SizedBox(height: 10),
@@ -396,12 +417,15 @@ class _StoragePageState extends State<StoragePage> {
           Row(
             children: <Widget>[
               Expanded(
-                child: _MetadataTile(label: 'type', value: _mediaTitle),
+                child: _MetadataTile(
+                  label: XLabLocalization.shared.text('storage.type'),
+                  value: _mediaTitle,
+                ),
               ),
               const SizedBox(width: 8),
               Expanded(
                 child: _MetadataTile(
-                  label: 'resolution',
+                  label: XLabLocalization.shared.text('storage.resolution'),
                   value: _resolution,
                   compact: true,
                 ),
@@ -409,7 +433,7 @@ class _StoragePageState extends State<StoragePage> {
               const SizedBox(width: 8),
               Expanded(
                 child: _MetadataTile(
-                  label: 'size',
+                  label: XLabLocalization.shared.text('storage.size'),
                   value: _fileBytes == 0 ? '--' : _formatBytes(_fileBytes),
                   compact: true,
                 ),
@@ -485,7 +509,10 @@ class _StoragePageState extends State<StoragePage> {
       Row(
         children: <Widget>[
           Text(
-            '上传中 ${(_progress * 100).round()}%',
+            XLabLocalization.shared.formatCount(
+              'storage.upload.progress',
+              (_progress * 100).round(),
+            ),
             style: const TextStyle(
               color: _orange,
               fontSize: 10,
@@ -516,14 +543,14 @@ class _StoragePageState extends State<StoragePage> {
         children: <Widget>[
           Expanded(
             child: _StorageOutlineButton(
-              label: '安全检测上传',
+              label: XLabLocalization.shared.text('storage.upload.safe'),
               onPressed: () => _upload(safetyCheck: true),
             ),
           ),
           const SizedBox(width: 10),
           Expanded(
             child: _StorageOutlineButton(
-              label: '普通上传',
+              label: XLabLocalization.shared.text('storage.upload.normal'),
               onPressed: () => _upload(safetyCheck: false),
             ),
           ),
@@ -534,7 +561,7 @@ class _StoragePageState extends State<StoragePage> {
     return SizedBox(
       width: double.infinity,
       child: _StorageOutlineButton(
-        label: '上传并获取地址',
+        label: XLabLocalization.shared.text('storage.upload.getURL'),
         onPressed: () => _upload(safetyCheck: false),
       ),
     );
@@ -567,29 +594,29 @@ class _StoragePageState extends State<StoragePage> {
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        const Row(
+        Row(
           children: <Widget>[
-            _StepPill('02'),
-            SizedBox(width: 9),
+            const _StepPill('02'),
+            const SizedBox(width: 9),
             Expanded(
               child: Text(
-                '上传结果',
-                style: TextStyle(
+                XLabLocalization.shared.text('storage.result'),
+                style: const TextStyle(
                   color: Color(0xFFF2ECE4),
                   fontSize: 13.5,
                   fontWeight: FontWeight.w700,
                 ),
               ),
             ),
-            _SuccessPill(),
+            const _SuccessPill(),
           ],
         ),
         const SizedBox(height: 15),
         Row(
           children: <Widget>[
-            const Text(
-              '上传耗时',
-              style: TextStyle(color: Color(0xFF718095), fontSize: 11),
+            Text(
+              XLabLocalization.shared.text('storage.elapsed'),
+              style: const TextStyle(color: Color(0xFF718095), fontSize: 11),
             ),
             const Spacer(),
             Text(
@@ -603,9 +630,9 @@ class _StoragePageState extends State<StoragePage> {
           ],
         ),
         const SizedBox(height: 14),
-        const Text(
-          'REMOTE URL',
-          style: TextStyle(
+        Text(
+          XLabLocalization.shared.text('storage.remoteURL'),
+          style: const TextStyle(
             color: Color(0xFF667589),
             fontSize: 9,
             fontWeight: FontWeight.w700,
@@ -634,18 +661,24 @@ class _StoragePageState extends State<StoragePage> {
         const SizedBox(height: 12),
         SizedBox(
           width: double.infinity,
-          child: _StorageOutlineButton(label: '复制地址', onPressed: _copyURL),
+          child: _StorageOutlineButton(
+            label: XLabLocalization.shared.text('storage.copy'),
+            onPressed: _copyURL,
+          ),
         ),
       ],
     ),
   );
 
-  String get _mediaTitle => _isImage ? '图片' : '视频';
+  String get _mediaTitle =>
+      XLabLocalization.shared.text(_isImage ? 'media.image' : 'media.video');
 
   String get _uploadMode {
-    if (!_isImage) return '正在上传视频';
-    if (_safetyCheck) return '包含内容安全检查';
-    return '正在上传图片';
+    if (!_isImage) return XLabLocalization.shared.text('storage.upload.video');
+    if (_safetyCheck) {
+      return XLabLocalization.shared.text('storage.upload.safety');
+    }
+    return XLabLocalization.shared.text('storage.upload.image');
   }
 
   static Future<String> _imageResolution(String path) async {
@@ -686,21 +719,21 @@ final class _PipelineLabels extends StatelessWidget {
   const _PipelineLabels();
 
   @override
-  Widget build(BuildContext context) => const Row(
+  Widget build(BuildContext context) => Row(
     children: <Widget>[
       Text(
-        'LOCAL FILE',
-        style: TextStyle(
+        XLabLocalization.shared.text('storage.localFile'),
+        style: const TextStyle(
           color: Color(0xFF9A8B7A),
           fontSize: 8,
           fontWeight: FontWeight.w700,
         ),
       ),
-      Padding(
+      const Padding(
         padding: EdgeInsets.symmetric(horizontal: 8),
         child: Text('—', style: TextStyle(color: Color(0xFF66513A))),
       ),
-      Text(
+      const Text(
         'XMAX SDK',
         style: TextStyle(
           color: _orange,
@@ -708,13 +741,13 @@ final class _PipelineLabels extends StatelessWidget {
           fontWeight: FontWeight.w700,
         ),
       ),
-      Padding(
+      const Padding(
         padding: EdgeInsets.symmetric(horizontal: 8),
         child: Text('—', style: TextStyle(color: Color(0xFF66513A))),
       ),
       Text(
-        'REMOTE URL',
-        style: TextStyle(
+        XLabLocalization.shared.text('storage.remoteURL'),
+        style: const TextStyle(
           color: Color(0xFF9A8B7A),
           fontSize: 8,
           fontWeight: FontWeight.w700,
@@ -728,23 +761,23 @@ final class _EmptyPickerContent extends StatelessWidget {
   const _EmptyPickerContent();
 
   @override
-  Widget build(BuildContext context) => const Column(
+  Widget build(BuildContext context) => Column(
     mainAxisAlignment: MainAxisAlignment.center,
     children: <Widget>[
-      _PickerPlus(),
-      SizedBox(height: 11),
+      const _PickerPlus(),
+      const SizedBox(height: 11),
       Text(
-        '点击选择图片或视频',
-        style: TextStyle(
+        XLabLocalization.shared.text('storage.select.hint'),
+        style: const TextStyle(
           color: Color(0xFF9D9185),
           fontSize: 12,
           fontWeight: FontWeight.w700,
         ),
       ),
-      SizedBox(height: 5),
+      const SizedBox(height: 5),
       Text(
-        'IMAGE  /  VIDEO',
-        style: TextStyle(
+        XLabLocalization.shared.text('storage.mediaTypes'),
+        style: const TextStyle(
           color: Color(0xFF62584E),
           fontSize: 9,
           letterSpacing: 0.8,
@@ -881,9 +914,9 @@ final class _SuccessPill extends StatelessWidget {
       borderRadius: BorderRadius.circular(99),
       border: Border.all(color: _orange.withValues(alpha: 0.28)),
     ),
-    child: const Text(
-      'SUCCESS',
-      style: TextStyle(
+    child: Text(
+      XLabLocalization.shared.text('storage.success'),
+      style: const TextStyle(
         color: _orange,
         fontSize: 8,
         fontWeight: FontWeight.w700,
