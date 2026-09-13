@@ -87,7 +87,13 @@ final class RtcManager implements RtcManaging {
           frameRate: configuration.frameRate,
           maxBitrate: configuration.maximumBitrate,
           minBitrate: configuration.minimumBitrate,
-          encoderPreference: VideoEncoderPreference.disabled,
+          encoderPreference: switch (configuration.encoderPreference) {
+            RealtimeVideoEncoderPreference.auto => VideoEncoderPreference.auto,
+            RealtimeVideoEncoderPreference.maintainFramerate =>
+              VideoEncoderPreference.maintain_framerate,
+            RealtimeVideoEncoderPreference.maintainQuality =>
+              VideoEncoderPreference.maintain_quality,
+          },
         ),
       ),
       'setVideoEncoderConfig',
@@ -441,6 +447,12 @@ final class RtcManager implements RtcManaging {
     onUserPublishStreamVideo: (streamID, info, published) {
       _remoteStreamIDs[info.userId] = streamID;
       _eventListener?.onRemoteVideoPublished?.call(
+        _remoteStream(streamID, info),
+        published,
+      );
+    },
+    onUserPublishStreamAudio: (streamID, info, published) {
+      _eventListener?.onRemoteAudioPublished?.call(
         _remoteStream(streamID, info),
         published,
       );

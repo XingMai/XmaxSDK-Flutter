@@ -48,13 +48,15 @@ abstract interface class XmaxRealtimeManaging {
 
   /// 设置本地媒体预览音量。
   ///
-  /// [volume] 的取值范围为 `0...1`；超出范围时 Future 会失败。
+  /// [volume] 的取值范围为 `0...1`。当前仅支持摄像头输入，没有本地
+  /// 文件视频的音频预览；调用会以 `invalidConfiguration` 失败。
   Future<void> setLocalAudioVolume(double volume);
 
   /// 设置远端生成音频的播放音量。
   ///
   /// [volume] 的取值范围为 `0...1`。尚未连接或订阅远端流时，
-  /// SDK 会保存配置并在远端音频开始播放前应用。
+  /// SDK 会保存配置，并在生成流确认后订阅远端音频前应用。
+  /// 摄像头流默认静音；需要播放生成音频时，请显式设置大于零的音量。
   Future<void> setRemoteAudioVolume(double volume);
 
   /// 创建本地摄像头流并开始预览。

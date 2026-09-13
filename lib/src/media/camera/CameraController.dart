@@ -133,10 +133,9 @@ final class CameraController {
     final size = _mediaService.resolveModelInputSize(
       Size(videoFormat.width.toDouble(), videoFormat.height.toDouble()),
     );
-    final format = RealtimeVideoFormat(
+    final format = videoFormat.resized(
       width: size.width.toInt(),
       height: size.height.toInt(),
-      fps: videoFormat.fps,
     );
     format.validate();
     return format;

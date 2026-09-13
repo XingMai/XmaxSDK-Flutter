@@ -7,6 +7,7 @@ import 'RtcModels.dart';
 final class RtcEventListener {
   const RtcEventListener({
     this.onRemoteVideoPublished,
+    this.onRemoteAudioPublished,
     this.onSEIMessageReceived,
     this.onError,
     this.onNetworkQuality,
@@ -15,6 +16,8 @@ final class RtcEventListener {
 
   final void Function(RemoteStream stream, bool published)?
   onRemoteVideoPublished;
+  final void Function(RemoteStream stream, bool published)?
+  onRemoteAudioPublished;
   final void Function(RemoteStream stream, Uint8List message)?
   onSEIMessageReceived;
   final void Function(Object error)? onError;

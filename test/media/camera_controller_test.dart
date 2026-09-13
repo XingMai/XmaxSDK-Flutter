@@ -124,6 +124,40 @@ void main() {
     );
     expect(rtc.lastCaptureSize, isNull);
   });
+
+  test('camera resize preserves bitrate bounds and encoder preference', () async {
+    final rtc = _FakeRtc();
+    final camera = CameraController(
+      rtcManager: rtc,
+      permissionManager: const _AllowedPermissions(),
+      mediaService: const _ResizingMediaService(),
+    );
+
+    final stream = await camera.createLocalCameraStream(
+      videoFormat: const RealtimeVideoFormat(
+        width: 832,
+        height: 1472,
+        fps: 30,
+        minimumBitrate: 900,
+        maximumBitrate: 3000,
+        encoderPreference: RealtimeVideoEncoderPreference.maintainFramerate,
+      ),
+      position: CameraPosition.front,
+    );
+
+    expect(
+      stream.videoTrack?.videoFormat,
+      const RealtimeVideoFormat(
+        width: 800,
+        height: 1408,
+        fps: 30,
+        minimumBitrate: 900,
+        maximumBitrate: 3000,
+        encoderPreference: RealtimeVideoEncoderPreference.maintainFramerate,
+      ),
+    );
+    await camera.stopLocalCameraStream();
+  });
 }
 
 final class _AllowedPermissions implements PermissionManaging {
@@ -141,6 +175,13 @@ final class _IdentityMediaService implements MediaServicing {
 
   @override
   Size resolveModelInputSize(Size size) => size;
+}
+
+final class _ResizingMediaService implements MediaServicing {
+  const _ResizingMediaService();
+
+  @override
+  Size resolveModelInputSize(Size size) => const Size(800, 1408);
 }
 
 final class _FakeRtc implements RtcManaging {

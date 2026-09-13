@@ -129,7 +129,14 @@ final class MediaController implements MediaControlling {
   }
 
   @override
-  Future<void> setLocalAudioVolume(double volume) async {}
+  Future<void> setLocalAudioVolume(double volume) async {
+    // Local audio preview belongs to file-video input on iOS. This
+    // camera-only implementation has no local playback stream to adjust.
+    throw const XmaxError(
+      code: XmaxErrorCode.invalidConfiguration,
+      message: 'Local audio preview volume is unavailable for camera input',
+    );
+  }
 
   @override
   bool owns(RealtimeMediaStream stream) {

@@ -27,6 +27,7 @@ abstract interface class StreamControlling {
   void setNetworkQualityListener(RealtimeNetworkQualityListener? listener);
   void setPerformanceAlarmListener(RealtimePerformanceAlarmListener? listener);
   Future<void> setRemoteAudioVolume(double volume);
+  Future<void> activateRemoteAudio();
   Future<void> connect({
     required RealtimeSessionConnection connection,
     required void Function() ensureActive,

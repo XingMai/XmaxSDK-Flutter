@@ -19,6 +19,7 @@ final class VideoEncodingConfiguration {
     required this.frameRate,
     this.minimumBitrate = 0,
     this.maximumBitrate = -1,
+    this.encoderPreference = RealtimeVideoEncoderPreference.auto,
   });
 
   final int width;
@@ -26,14 +27,7 @@ final class VideoEncodingConfiguration {
   final int frameRate;
   final int minimumBitrate;
   final int maximumBitrate;
-
-  factory VideoEncodingConfiguration.fromVideoFormat(
-    RealtimeVideoFormat format,
-  ) => VideoEncodingConfiguration(
-    width: format.width,
-    height: format.height,
-    frameRate: format.fps,
-  );
+  final RealtimeVideoEncoderPreference encoderPreference;
 }
 
 final class RemoteStream {

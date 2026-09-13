@@ -69,6 +69,11 @@ final class XmaxRealtimeGenerationManager {
 
       ensureCurrent();
 
+      // Audio belongs to the SEI-selected generation stream, not every
+      // published RTC stream. Subscribe only after that stream is confirmed.
+      await _streamController.activateRemoteAudio();
+      ensureCurrent();
+
       _interactionController.startInteraction(
         taskID: taskID,
         videoFormat: videoFormat,

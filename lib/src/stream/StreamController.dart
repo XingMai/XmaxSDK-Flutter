@@ -43,6 +43,7 @@ final class StreamController implements StreamControlling {
     rtcManager.setEventListener(
       RtcEventListener(
         onRemoteVideoPublished: _onRemoteVideoPublished,
+        onRemoteAudioPublished: _onRemoteAudioPublished,
         onSEIMessageReceived: _onSEIMessageReceived,
         onError: _onError,
         onNetworkQuality: _qualityController.emitNetworkQuality,
@@ -63,7 +64,12 @@ final class StreamController implements StreamControlling {
   String _botName = '';
   bool _localVideoPublished = false;
   final Set<String> _remoteVideoSubscriptions = <String>{};
+  final Map<String, String> _publishedRemoteAudioStreams = <String, String>{};
   RemoteStream? _activeRemoteStream;
+  String? _subscribedRemoteAudioStreamID;
+  Future<void>? _audioActivation;
+  int _remoteAudioVolumePercentage = 0;
+  int _audioSubscriptionVersion = 0;
   String? _generationTaskID;
   Completer<void>? _generationCompleter;
   Timer? _generationTimer;
@@ -86,24 +92,112 @@ final class StreamController implements StreamControlling {
   }
 
   @override
-  Future<void> setRemoteAudioVolume(double volume) async {}
+  Future<void> setRemoteAudioVolume(double volume) async {
+    if (!volume.isFinite || volume < 0 || volume > 1) {
+      throw const XmaxError(
+        code: XmaxErrorCode.invalidConfiguration,
+        message: 'Audio volume must be between 0 and 1',
+      );
+    }
+
+    final rtcVolume = (volume * 100).round();
+    final streamID = _subscribedRemoteAudioStreamID;
+    if (streamID != null) {
+      await _rtcManager.setRemoteAudioVolume(
+        volume: rtcVolume,
+        streamID: streamID,
+      );
+    }
+    _remoteAudioVolumePercentage = rtcVolume;
+  }
+
+  @override
+  Future<void> activateRemoteAudio() async {
+    final stream = _activeRemoteStream;
+    if (_generationTaskID == null || stream == null) {
+      throw const XmaxError(
+        code: XmaxErrorCode.rtcError,
+        message: 'Remote generation audio stream is unavailable',
+      );
+    }
+
+    // The RTC audio stream can use an ID different from the SEI video stream.
+    // If its publish event has not arrived, subscribe when that event arrives.
+    final streamID = _publishedRemoteAudioStreams[stream.userID];
+    if (streamID == null) return;
+    if (_subscribedRemoteAudioStreamID == streamID) return;
+
+    final activeOperation = _audioActivation;
+    if (activeOperation != null) return activeOperation;
+
+    final operation = _performActivateRemoteAudio(stream, streamID);
+    _audioActivation = operation;
+    try {
+      await operation;
+    } finally {
+      if (identical(_audioActivation, operation)) {
+        _audioActivation = null;
+      }
+    }
+  }
+
+  Future<void> _performActivateRemoteAudio(
+    RemoteStream stream,
+    String streamID,
+  ) async {
+    final version = _audioSubscriptionVersion;
+    final initialVolume = _remoteAudioVolumePercentage;
+    await _rtcManager.setRemoteAudioVolume(
+      volume: initialVolume,
+      streamID: streamID,
+    );
+    _ensureAudioStreamCurrent(stream, streamID, version);
+
+    await _rtcManager.subscribeRemoteAudio(streamID: streamID, subscribe: true);
+    if (!_isAudioStreamCurrent(stream, streamID, version)) {
+      await _safe(
+        '取消过期 RTC 远端音频订阅失败 '
+        '(Failed to Unsubscribe from Stale RTC Remote Audio)',
+        () => _rtcManager.subscribeRemoteAudio(
+          streamID: streamID,
+          subscribe: false,
+        ),
+      );
+      _ensureAudioStreamCurrent(stream, streamID, version);
+    }
+
+    _subscribedRemoteAudioStreamID = streamID;
+    if (initialVolume != _remoteAudioVolumePercentage) {
+      await _rtcManager.setRemoteAudioVolume(
+        volume: _remoteAudioVolumePercentage,
+        streamID: streamID,
+      );
+    }
+  }
 
   @override
   Future<void> connect({
     required RealtimeSessionConnection connection,
     required void Function() ensureActive,
   }) async {
-    await _roomController.join(
-      connection: connection,
-      ensureActive: ensureActive,
-    );
-
-    ensureActive();
+    // Existing remote streams may be reported while join() is still pending.
     _roomID = connection.roomID.trim();
     _botName = connection.botName?.trim() ?? '';
+    try {
+      await _roomController.join(
+        connection: connection,
+        ensureActive: ensureActive,
+      );
 
-    await _rtcManager.publishLocalVideo(publish: true);
-    _localVideoPublished = true;
+      ensureActive();
+      await _rtcManager.publishLocalVideo(publish: true);
+      _localVideoPublished = true;
+    } catch (_) {
+      _roomID = '';
+      _botName = '';
+      _publishedRemoteAudioStreams.clear();
+      rethrow;
+    }
   }
 
   @override
@@ -129,6 +223,7 @@ final class StreamController implements StreamControlling {
     }
 
     _remoteVideoSubscriptions.clear();
+    _publishedRemoteAudioStreams.clear();
     _localVideoPublished = false;
     _roomID = '';
     _botName = '';
@@ -257,7 +352,37 @@ final class StreamController implements StreamControlling {
       _remoteVideoSubscriptions.remove(stream.streamID);
       if (_activeRemoteStream?.streamID == stream.streamID) {
         _activeRemoteStream = null;
+        unawaited(_deactivateRemoteAudio());
         _clearRemoteStream();
+      }
+    }
+  }
+
+  void _onRemoteAudioPublished(RemoteStream stream, bool published) {
+    if (!_isExpectedRemote(stream)) return;
+
+    if (published) {
+      _publishedRemoteAudioStreams[stream.userID] = stream.streamID;
+      if (_activeRemoteStream?.userID == stream.userID) {
+        unawaited(_activatePublishedAudio());
+      }
+      return;
+    }
+
+    if (_publishedRemoteAudioStreams[stream.userID] != stream.streamID) return;
+    _publishedRemoteAudioStreams.remove(stream.userID);
+    if (_activeRemoteStream?.userID == stream.userID) {
+      unawaited(_deactivateRemoteAudio());
+    }
+  }
+
+  Future<void> _activatePublishedAudio() async {
+    try {
+      await activateRemoteAudio();
+    } catch (error) {
+      final xmaxError = XmaxError.from(error);
+      if (xmaxError.code != XmaxErrorCode.cancelled) {
+        _errorListener?.call(xmaxError);
       }
     }
   }
@@ -342,10 +467,49 @@ final class StreamController implements StreamControlling {
 
     _generationTaskID = null;
     _activeRemoteStream = null;
+    await _deactivateRemoteAudio();
 
     if (notifyRemote) {
       _clearRemoteStream();
     }
+  }
+
+  bool _isAudioStreamCurrent(
+    RemoteStream stream,
+    String streamID,
+    int version,
+  ) =>
+      version == _audioSubscriptionVersion &&
+      _generationTaskID != null &&
+      identical(_activeRemoteStream, stream) &&
+      _publishedRemoteAudioStreams[stream.userID] == streamID;
+
+  void _ensureAudioStreamCurrent(
+    RemoteStream stream,
+    String streamID,
+    int version,
+  ) {
+    if (!_isAudioStreamCurrent(stream, streamID, version)) {
+      throw const XmaxError(
+        code: XmaxErrorCode.cancelled,
+        message: 'Remote generation audio subscription was cancelled',
+      );
+    }
+  }
+
+  Future<void> _deactivateRemoteAudio() async {
+    final subscribedID = _subscribedRemoteAudioStreamID;
+    _audioSubscriptionVersion += 1;
+    _subscribedRemoteAudioStreamID = null;
+    if (subscribedID == null) return;
+
+    await _safe(
+      '取消订阅 RTC 远端音频失败 (Failed to Unsubscribe from RTC Remote Audio)',
+      () => _rtcManager.subscribeRemoteAudio(
+        streamID: subscribedID,
+        subscribe: false,
+      ),
+    );
   }
 
   void _clearRemoteStream() {

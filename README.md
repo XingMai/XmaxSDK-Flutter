@@ -464,6 +464,13 @@ The widget keeps the local camera preview underneath the generated video, enable
 touch interaction by default, and returns to the local preview after
 `stopGeneration()` or `disconnect()`.
 
+Camera generation audio is muted by default. To hear it, call
+`await _realtime.setRemoteAudioVolume(0.8)` after creating the local stream;
+the setting is applied when the generated stream is selected. The Flutter
+camera-only SDK has no local file-video audio preview, so
+`setLocalAudioVolume()` reports an unsupported configuration instead of
+silently doing nothing.
+
 To update an active generation task, submit a new context without another local
 stream:
 

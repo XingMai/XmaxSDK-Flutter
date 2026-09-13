@@ -75,4 +75,58 @@ void main() {
       );
     }
   });
+
+  test(
+    'RealtimeVideoFormat validates bitrates and preserves encoding on resize',
+    () {
+      const format = RealtimeVideoFormat(
+        width: 832,
+        height: 1472,
+        fps: 30,
+        minimumBitrate: 1000,
+        maximumBitrate: 3000,
+        encoderPreference: RealtimeVideoEncoderPreference.maintainQuality,
+      );
+      expect(format.validate, returnsNormally);
+      expect(
+        format.resized(width: 1024, height: 1920),
+        const RealtimeVideoFormat(
+          width: 1024,
+          height: 1920,
+          fps: 30,
+          minimumBitrate: 1000,
+          maximumBitrate: 3000,
+          encoderPreference: RealtimeVideoEncoderPreference.maintainQuality,
+        ),
+      );
+      expect(
+        format,
+        isNot(const RealtimeVideoFormat(width: 832, height: 1472, fps: 30)),
+      );
+
+      for (final invalid in <RealtimeVideoFormat>[
+        const RealtimeVideoFormat(
+          width: 832,
+          height: 1472,
+          fps: 30,
+          minimumBitrate: -1,
+        ),
+        const RealtimeVideoFormat(
+          width: 832,
+          height: 1472,
+          fps: 30,
+          maximumBitrate: 0,
+        ),
+        const RealtimeVideoFormat(
+          width: 832,
+          height: 1472,
+          fps: 30,
+          minimumBitrate: 3001,
+          maximumBitrate: 3000,
+        ),
+      ]) {
+        expect(invalid.validate, throwsA(isA<XmaxError>()));
+      }
+    },
+  );
 }

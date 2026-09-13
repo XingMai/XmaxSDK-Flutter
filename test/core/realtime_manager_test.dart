@@ -7,6 +7,8 @@ import 'package:xmax_sdk/src/core/realtime/RealtimeModel.dart';
 import 'package:xmax_sdk/src/core/realtime/XmaxRealtimeConnectionManager.dart';
 import 'package:xmax_sdk/src/core/realtime/XmaxRealtimeGenerationManager.dart';
 import 'package:xmax_sdk/src/core/realtime/XmaxRealtimeManager.dart';
+import 'package:xmax_sdk/src/core/XmaxClient.dart';
+import 'package:xmax_sdk/src/core/XmaxConfiguration.dart';
 import 'package:xmax_sdk/src/foundation/errors/XmaxError.dart';
 import 'package:xmax_sdk/src/foundation/media/camera/CameraPosition.dart';
 import 'package:xmax_sdk/src/foundation/rtc/RtcModels.dart';
@@ -98,6 +100,29 @@ void main() {
     );
     expect(reported?.code, XmaxErrorCode.invalidConfiguration);
   });
+
+  test(
+    'camera-only local audio volume fails instead of silently succeeding',
+    () async {
+      final manager =
+          XmaxClient(
+            configuration: XmaxConfiguration(apiKey: 'test-key'),
+          ).createRealtimeManager(
+            options: const RealtimeConfiguration(model: RealtimeModel.x2_0),
+          );
+
+      await expectLater(
+        manager.setLocalAudioVolume(0.5),
+        throwsA(
+          isA<XmaxError>().having(
+            (error) => error.code,
+            'code',
+            XmaxErrorCode.invalidConfiguration,
+          ),
+        ),
+      );
+    },
+  );
 
   test('camera switch stops and restores an active generation', () async {
     final dependencies = _Dependencies();
@@ -358,6 +383,8 @@ final class _FakeStream implements StreamControlling {
   Object? generationStartError;
   @override
   bool get hasGenerationTask => generation;
+  @override
+  Future<void> activateRemoteAudio() async {}
   @override
   Future<GenerationStartConfirmation> beginGeneration({
     required String taskID,
