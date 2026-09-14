@@ -29,16 +29,51 @@ import 'package:xmax_sdk/src/service/realtime/RealtimeVideoTrack.dart';
 import 'package:xmax_sdk/src/stream/StreamControlling.dart';
 
 void main() {
-  test('error listener failure does not replace the SDK error', () {
+  for (final connected in <bool>[false, true]) {
+    test(
+      'runtime failure reaches state listener (connected=$connected)',
+      () async {
+        final dependencies = _Dependencies();
+        final manager = dependencies.manager;
+        final stream = await manager.createLocalCameraStream(
+          videoFormat: _Dependencies.format,
+        );
+        dependencies.media.notifyPreviewReady();
+        if (connected) await manager.connect(localStream: stream);
+        const error = XmaxError(
+          code: XmaxErrorCode.rtcError,
+          message: 'RTC failed',
+        );
+        final failed = Completer<RealtimeState>();
+        await manager.setStateListener((state) {
+          if (state.reason?.error == error && !failed.isCompleted) {
+            failed.complete(state);
+          }
+        });
+        dependencies.errors.forward(error);
+        final state = await failed.future;
+        expect(
+          state.connectionState,
+          connected
+              ? RealtimeConnectionState.ready
+              : RealtimeConnectionState.idle,
+        );
+        expect(state.reason?.error, same(error));
+        expect(dependencies.media.stopCount, connected ? 0 : 1);
+        await manager.close();
+      },
+    );
+  }
+
+  test('method errors do not invoke the internal runtime failure handler', () {
     final handler = RealtimeErrorHandler();
-    handler.setListener((_) => throw StateError('listener failed'));
+    handler.setFailureHandler((_) => fail('Unexpected runtime failure'));
     const error = XmaxError(
       code: XmaxErrorCode.rtcError,
       message: 'RTC failed',
     );
 
     expect(handler.report(error), same(error));
-    expect(() => handler.forward(error), returnsNormally);
   });
 
   test('realtime manager follows iOS camera generation lifecycle', () async {
@@ -106,8 +141,8 @@ void main() {
 
   test('audio volume validation reports the same public error', () async {
     final manager = _Dependencies().manager;
-    XmaxError? reported;
-    await manager.setErrorListener((error) => reported = error);
+    final states = <RealtimeState>[];
+    await manager.setStateListener(states.add);
 
     await expectLater(
       manager.setRemoteAudioVolume(double.nan),
@@ -119,7 +154,7 @@ void main() {
         ),
       ),
     );
-    expect(reported?.code, XmaxErrorCode.invalidConfiguration);
+    expect(states.every((state) => state.reason == null), isTrue);
   });
 
   test(
@@ -147,9 +182,11 @@ void main() {
         RealtimeConnectionState.ready,
       );
       var lateReadyNotifications = 0;
-      await manager.setCameraPreviewReadyListener(
-        () => lateReadyNotifications += 1,
-      );
+      await manager.setStateListener((state) {
+        if (state.connectionState == RealtimeConnectionState.ready) {
+          lateReadyNotifications += 1;
+        }
+      });
       expect(lateReadyNotifications, 1);
 
       await manager.connect(localStream: localStream);
@@ -318,7 +355,7 @@ void main() {
   });
 
   test(
-    'camera-only local audio volume fails instead of silently succeeding',
+    'camera-only local audio volume matches the iOS no-player contract',
     () async {
       final manager =
           XmaxClient(
@@ -327,16 +364,30 @@ void main() {
             options: const RealtimeConfiguration(model: RealtimeModel.x2_0),
           );
 
-      await expectLater(
-        manager.setLocalAudioVolume(0.5),
-        throwsA(
-          isA<XmaxError>().having(
-            (error) => error.code,
-            'code',
-            XmaxErrorCode.invalidConfiguration,
-          ),
-        ),
-      );
+      expect(await manager.localAudioVolume, 0.45);
+      expect(await manager.remoteAudioVolume, 1.0);
+      for (final value in <double>[0, 0.5, 1]) {
+        await manager.setLocalAudioVolume(value);
+        expect(await manager.localAudioVolume, 0.45);
+      }
+      for (final value in <double>[
+        -0.01,
+        1.01,
+        double.nan,
+        double.infinity,
+        double.negativeInfinity,
+      ]) {
+        await expectLater(
+          manager.setLocalAudioVolume(value),
+          throwsA(isA<XmaxError>()),
+        );
+        await expectLater(
+          manager.setRemoteAudioVolume(value),
+          throwsA(isA<XmaxError>()),
+        );
+      }
+      expect(await manager.localAudioVolume, 0.45);
+      expect(await manager.remoteAudioVolume, 1.0);
     },
   );
 
@@ -365,11 +416,64 @@ void main() {
     );
   });
 
-  test('generation restore failure is reported only once', () async {
+  test(
+    'remote volume resets on camera creation, not stop or disconnect',
+    () async {
+      final dependencies = _Dependencies();
+      final manager = dependencies.manager;
+      expect(await manager.remoteAudioVolume, 1);
+      await manager.setRemoteAudioVolume(0.83);
+      final local = await manager.createLocalCameraStream(
+        videoFormat: _Dependencies.format,
+      );
+      expect(await manager.remoteAudioVolume, 0);
+      expect(await manager.localAudioVolume, 0.45);
+      await manager.setLocalAudioVolume(0.9);
+      expect(await manager.localAudioVolume, 0.45);
+      await manager.setRemoteAudioVolume(0.634);
+      expect(await manager.remoteAudioVolume, 0.63);
+      await manager.startGeneration(
+        localStream: local,
+        context: RealtimeContext(prompt: 'test'),
+      );
+      await manager.stopGeneration();
+      expect(await manager.remoteAudioVolume, 0.63);
+      await manager.switchCamera();
+      expect(await manager.remoteAudioVolume, 0.63);
+      await manager.disconnect();
+      expect(await manager.remoteAudioVolume, 0.63);
+      await manager.stopLocalCameraStream();
+      expect(await manager.remoteAudioVolume, 0.63);
+      await manager.createLocalCameraStream(videoFormat: _Dependencies.format);
+      expect(await manager.remoteAudioVolume, 0);
+      await manager.setRemoteAudioVolume(0.75);
+      await manager.close();
+      expect(await manager.remoteAudioVolume, 0.75);
+      await manager.createLocalCameraStream(videoFormat: _Dependencies.format);
+      expect(await manager.remoteAudioVolume, 0);
+      await manager.close();
+    },
+  );
+
+  test(
+    'failed camera creation preserves previously configured volume',
+    () async {
+      final dependencies = _Dependencies();
+      final manager = dependencies.manager;
+      await manager.setRemoteAudioVolume(0.8);
+      dependencies.media.createError = StateError('camera failed');
+      await expectLater(
+        manager.createLocalCameraStream(videoFormat: _Dependencies.format),
+        throwsA(isA<XmaxError>()),
+      );
+      expect(await manager.remoteAudioVolume, 0.8);
+      await manager.close();
+    },
+  );
+
+  test('generation restore failure is returned to the caller', () async {
     final dependencies = _Dependencies();
     final manager = dependencies.manager;
-    final reportedErrors = <XmaxError>[];
-    await manager.setErrorListener(reportedErrors.add);
     final localStream = await manager.createLocalCameraStream(
       videoFormat: _Dependencies.format,
     );
@@ -382,23 +486,25 @@ void main() {
     await expectLater(
       manager.switchCamera(),
       throwsA(
-        isA<XmaxError>().having(
-          (error) => error.code,
-          'code',
-          XmaxErrorCode.internalError,
-        ),
+        isA<XmaxError>()
+            .having((error) => error.code, 'code', XmaxErrorCode.internalError)
+            .having(
+              (error) => error.message,
+              'message',
+              contains('restore failed'),
+            ),
       ),
     );
-
-    expect(reportedErrors, hasLength(1));
-    expect(reportedErrors.single.message, contains('restore failed'));
   });
 
   test('serializes generation updates without disconnecting', () async {
     final dependencies = _Dependencies();
     final manager = dependencies.manager;
     final reportedErrors = <XmaxError>[];
-    await manager.setErrorListener(reportedErrors.add);
+    await manager.setStateListener((state) {
+      final error = state.reason?.error;
+      if (error != null) reportedErrors.add(error);
+    });
     final localStream = await manager.createLocalCameraStream(
       videoFormat: _Dependencies.format,
     );
@@ -448,7 +554,10 @@ void main() {
     final dependencies = _Dependencies();
     final manager = dependencies.manager;
     final reportedErrors = <XmaxError>[];
-    await manager.setErrorListener(reportedErrors.add);
+    await manager.setStateListener((state) {
+      final error = state.reason?.error;
+      if (error != null) reportedErrors.add(error);
+    });
     final localStream = await manager.createLocalCameraStream(
       videoFormat: _Dependencies.format,
     );
@@ -517,7 +626,7 @@ final class _Dependencies {
       streamController: stream,
       connectionManager: connection,
       generationManager: generation,
-      errorHandler: RealtimeErrorHandler(),
+      errorHandler: errors,
     );
   }
 
@@ -526,6 +635,7 @@ final class _Dependencies {
   final stream = _FakeStream();
   final render = _FakeRender();
   final sessions = _FakeSessions();
+  final errors = RealtimeErrorHandler();
   late final XmaxRealtimeConnectionManager connection;
   late final XmaxRealtimeGenerationManager generation;
   late final XmaxRealtimeManager manager;
@@ -557,6 +667,9 @@ final class _FakeMedia implements MediaControlling {
   RealtimeVideoTrack? get currentTrack => _active ? track : null;
   @override
   bool get hasAudio => false;
+
+  @override
+  Future<double> get localAudioVolume async => 0.45;
   @override
   Future<RealtimeMediaStream> createLocalCameraStream({
     required RealtimeVideoFormat videoFormat,
@@ -608,6 +721,8 @@ final class _FakeMedia implements MediaControlling {
 }
 
 final class _FakeStream implements StreamControlling {
+  @override
+  double remoteAudioVolume = 1;
   bool generation = false;
   bool autoConfirmGeneration = true;
   int disconnectCount = 0;
@@ -704,7 +819,10 @@ final class _FakeStream implements StreamControlling {
     RealtimePerformanceAlarmListener? listener,
   ) {}
   @override
-  Future<void> setRemoteAudioVolume(double volume) async {}
+  Future<void> setRemoteAudioVolume(double volume) async {
+    remoteAudioVolume = (volume * 100).round() / 100;
+  }
+
   @override
   Future<void> setVideoEncoderConfig(RealtimeVideoFormat videoFormat) async {}
   @override

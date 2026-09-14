@@ -30,7 +30,6 @@ environment:
 # versions available, run `flutter pub outdated`.
 dependencies:
   cached_network_image: 3.4.1
-  file_selector: 1.1.0
   flutter:
     sdk: flutter
   flutter_localizations:
@@ -43,7 +42,7 @@ dependencies:
     path: ../
 
 dev_dependencies:
-  file_selector_platform_interface: 2.7.0
+  image_picker_platform_interface: 2.11.1
   flutter_lints: 6.0.0
   flutter_test:
     sdk: flutter

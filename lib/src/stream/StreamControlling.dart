@@ -25,6 +25,7 @@ final class GenerationStartConfirmation {
 
 abstract interface class StreamControlling {
   bool get hasGenerationTask;
+  double get remoteAudioVolume;
   Future<void> setVideoEncoderConfig(RealtimeVideoFormat videoFormat);
   void setNetworkQualityListener(RealtimeNetworkQualityListener? listener);
   void setPerformanceAlarmListener(RealtimePerformanceAlarmListener? listener);

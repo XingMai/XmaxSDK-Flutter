@@ -8,6 +8,7 @@ abstract interface class MediaControlling implements InteractionControlling {
   RealtimeVideoTrack? get currentTrack;
   RealtimeVideoFormat? get currentVideoFormat;
   bool get hasAudio;
+  Future<double> get localAudioVolume;
 
   void setCameraPreviewReadyListener(
     RealtimeCameraPreviewReadyListener? listener,

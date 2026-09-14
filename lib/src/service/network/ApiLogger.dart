@@ -35,8 +35,8 @@ abstract final class ApiLogger {
       category: XmaxLoggerCategory.api,
       message:
           '${method.value} $path 失败 (Request Failed)\n'
-          '├─ 耗时：$durationMs ms\n'
-          '└─ 原因：${ErrorMessageFormatter.format(error)}',
+          '├─ ${XmaxLogger.localized('耗时：', 'Duration: ')}$durationMs ms\n'
+          '└─ ${XmaxLogger.localized('原因：', 'Reason: ')}${ErrorMessageFormatter.format(error)}',
     );
   }
 
@@ -48,7 +48,7 @@ abstract final class ApiLogger {
     required int durationMs,
   }) =>
       '${method.value} $path\n'
-      '├─ 状态：$statusCode\n'
-      '├─ 耗时：$durationMs ms\n'
-      '└─ 响应：$bodyByteCount bytes';
+      '├─ ${XmaxLogger.localized('状态：', 'Status: ')}$statusCode\n'
+      '├─ ${XmaxLogger.localized('耗时：', 'Duration: ')}$durationMs ms\n'
+      '└─ ${XmaxLogger.localized('响应：', 'Response Size: ')}$bodyByteCount bytes';
 }

@@ -34,7 +34,7 @@ final class RoomHeartbeat {
                 category: XmaxLoggerCategory.room,
                 message:
                     '发送 RTC 房间心跳失败 (Failed to Send RTC Room Heartbeat)\n'
-                    '└─ 原因：$error',
+                    '└─ ${XmaxLogger.localized('原因：', 'Reason: ')}$error',
               );
             }
           }

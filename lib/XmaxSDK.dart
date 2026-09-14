@@ -17,14 +17,12 @@ export 'src/foundation/media/camera/CameraPosition.dart';
 export 'src/foundation/media/video/VideoContentMode.dart';
 export 'src/service/media/MediaServicing.dart';
 export 'src/service/realtime/RealtimeContext.dart';
-export 'src/service/realtime/RealtimeError.dart';
 export 'src/service/realtime/RealtimeMediaStream.dart' show RealtimeMediaStream;
 export 'src/service/realtime/RealtimeNetworkQuality.dart';
 export 'src/service/realtime/RealtimePerformanceAlarm.dart';
 export 'src/service/realtime/RealtimeState.dart';
 export 'src/service/realtime/RealtimeVideoFormat.dart';
-export 'src/service/realtime/RealtimeVideoTrack.dart'
-    show RealtimeCameraPreviewReadyListener, RealtimeVideoTrack;
+export 'src/service/realtime/RealtimeVideoTrack.dart' show RealtimeVideoTrack;
 export 'src/render/trajectory/DefaultTrajectoryEffectRenderer.dart';
 export 'src/render/trajectory/TrajectoryEffectRendering.dart'
     show TrajectoryEffectRendering, TrajectoryID, TrajectoryPoint;

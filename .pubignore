@@ -31,6 +31,14 @@
 .pub/
 /build/
 /coverage/
+/android/.gradle/
+/android/build/
+/android/local.properties
+/android/gradlew
+/android/gradlew.bat
+/android/gradle/wrapper/
+/ios/Pods/
+/ios/Podfile.lock
 /pubspec.lock
 **/android/build/reports/
 

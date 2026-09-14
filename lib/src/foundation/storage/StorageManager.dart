@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:tencentcloud_cos_sdk_plugin_nobeacon/cos.dart';
 import 'package:tencentcloud_cos_sdk_plugin_nobeacon/cos_transfer_manger.dart';
 import 'package:tencentcloud_cos_sdk_plugin_nobeacon/enums.dart';
+import 'package:tencentcloud_cos_sdk_plugin_nobeacon/fetch_credentials.dart';
 import 'package:tencentcloud_cos_sdk_plugin_nobeacon/pigeon.dart';
 
 import '../errors/ErrorMessageFormatter.dart';
@@ -24,6 +25,7 @@ final class StorageManager implements StorageManaging {
     : _httpClient = httpClient ?? HttpClient();
 
   final HttpClient _httpClient;
+  static Future<void>? _credentialProviderInitialization;
 
   @override
   Future<StoredFile> upload({
@@ -225,6 +227,12 @@ final class StorageManager implements StorageManaging {
   Future<CosTransferManger> _transferManager(
     StorageConfiguration configuration,
   ) async {
+    // iOS creates its native signer during initialization, not registration.
+    // Per-request credentials alone do not install that signer. Share the
+    // initialization Future so concurrent uploads cannot register too early.
+    await (_credentialProviderInitialization ??= Cos()
+        .initWithSessionCredential(_RequestOnlyCredentials()));
+
     final key =
         'xmax-simple-${configuration.region}-'
         '${configuration.endpoint.hashCode}-${configuration.bucket.hashCode}';
@@ -360,4 +368,16 @@ final class StorageManager implements StorageManaging {
 
   static bool _isHTTPURL(Uri uri) =>
       (uri.isScheme('http') || uri.isScheme('https')) && uri.host.isNotEmpty;
+}
+
+/// Every upload supplies its own STS credential. Never fall back to another
+/// client's credential through the process-wide COS credential provider.
+final class _RequestOnlyCredentials implements IFetchCredentials {
+  @override
+  Future<SessionQCloudCredentials> fetchSessionCredentials() async {
+    throw const XmaxError(
+      code: XmaxErrorCode.uploadError,
+      message: 'Storage request is missing its temporary credential',
+    );
+  }
 }

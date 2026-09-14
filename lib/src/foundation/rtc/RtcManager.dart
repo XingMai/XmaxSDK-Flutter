@@ -393,7 +393,7 @@ final class RtcManager implements RtcManaging {
         category: XmaxLoggerCategory.rtc,
         message:
             '远端首帧已解码 (First Remote Video Frame Decoded)\n'
-            '├─ streamID：$streamID\n'
+            '├─ ${XmaxLogger.localized('streamID：', 'streamID: ')}$streamID\n'
             '└─ ${frameInfo.width} × ${frameInfo.height}',
       );
     },
@@ -403,7 +403,7 @@ final class RtcManager implements RtcManaging {
         category: XmaxLoggerCategory.rtc,
         message:
             '远端首帧已渲染 (First Remote Video Frame Rendered)\n'
-            '└─ streamID：$streamID',
+            '└─ ${XmaxLogger.localized('streamID：', 'streamID: ')}$streamID',
       );
       _eventListener?.onFirstRemoteVideoFrameRendered?.call(
         _remoteStream(streamID, info),

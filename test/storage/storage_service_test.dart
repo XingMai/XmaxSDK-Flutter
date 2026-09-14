@@ -2,6 +2,7 @@ import 'dart:typed_data';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:xmax_sdk/src/foundation/logging/XmaxLogger.dart';
 import 'package:xmax_sdk/src/foundation/storage/StorageManaging.dart';
 import 'package:xmax_sdk/src/foundation/storage/StorageModels.dart';
 import 'package:xmax_sdk/src/service/network/ApiServicing.dart';
@@ -23,6 +24,44 @@ void main() {
       identifierGenerator: () => 'ABC-123',
     );
   });
+
+  test(
+    'global storage logs keep bilingual titles and English details',
+    () async {
+      final messages = <String>[];
+      XmaxLogger.configure(
+        options: XmaxLoggerOption.all,
+        environment: XmaxEnvironment.global,
+      );
+      XmaxLogger.setSink((_, message) => messages.add(message));
+      addTearDown(XmaxLogger.reset);
+      await service.uploadImage(
+        data: Uint8List.fromList(<int>[1]),
+        fileName: 'image.png',
+        contentType: 'image/png',
+      );
+      expect(messages.first, contains('开始上传 (Upload Started)'));
+      expect(messages.first, contains('├─ Type: image'));
+      expect(messages.first, contains('└─ Safety Check: false'));
+      expect(messages.last, contains('├─ URL: https://bucket.example/'));
+      expect(messages.last, contains('└─ Duration: '));
+      storageManager.uploadError = const XmaxError(
+        code: XmaxErrorCode.uploadError,
+        message: 'AccessDenied',
+      );
+      await expectLater(
+        service.uploadVideo(
+          data: Uint8List.fromList(<int>[1]),
+          fileName: 'video.mp4',
+          contentType: 'video/mp4',
+        ),
+        throwsA(isA<XmaxError>()),
+      );
+      expect(messages.last, contains('上传失败 (Upload Failed)'));
+      expect(messages.last, contains('├─ Error Code: UPLOAD_ERROR'));
+      expect(messages.last, contains('├─ Reason: AccessDenied'));
+    },
+  );
 
   test(
     'uploadImage fetches STS and builds iOS-compatible object key',
@@ -139,6 +178,35 @@ void main() {
       ),
     );
   });
+
+  test(
+    'upload failures include a storage diagnostic and preserve the error',
+    () async {
+      final messages = <String>[];
+      XmaxLogger.configure(options: XmaxLoggerOption.all);
+      XmaxLogger.setSink((level, message) => messages.add(message));
+      addTearDown(XmaxLogger.reset);
+      const error = XmaxError(
+        code: XmaxErrorCode.uploadError,
+        message: 'COS signature failed',
+      );
+      storageManager.uploadError = error;
+
+      await expectLater(
+        service.uploadImage(
+          data: Uint8List.fromList(<int>[1]),
+          fileName: 'image.png',
+          contentType: 'image/png',
+        ),
+        throwsA(same(error)),
+      );
+      expect(
+        messages.where((message) => message.contains('Upload Failed')),
+        hasLength(1),
+      );
+      expect(messages.last, contains('COS signature failed'));
+    },
+  );
 }
 
 final class _FakeApiService implements ApiServicing {

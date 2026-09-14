@@ -38,7 +38,7 @@ final class PermissionManager implements PermissionManaging {
         category: XmaxLoggerCategory.permission,
         message:
             '权限申请失败 (Permission Request Failed)\n'
-            '└─ 原因：${ErrorNormalizer.description(error)}',
+            '└─ ${XmaxLogger.localized('原因：', 'Reason: ')}${ErrorNormalizer.description(error)}',
       );
       throw XmaxError(code: errorCode, message: errorMessage);
     }

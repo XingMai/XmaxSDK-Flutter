@@ -192,11 +192,11 @@ final class RoomController implements RoomControlling {
       ).convert(_sortJson(object));
       final indented = formatted.replaceAll('\n', '\n   ');
       return '发送房间信令 (Outbound Room Signaling)\n'
-          '├─ 类型：$eventType\n'
-          '└─ 内容：\n'
+          '├─ ${XmaxLogger.localized('类型：', 'Type: ')}$eventType\n'
+          '└─ ${XmaxLogger.localized('内容：', 'Content: ')}\n'
           '   $indented';
     } catch (_) {
-      return '发送房间信令 (Outbound Room Signaling)\n└─ 内容：$message';
+      return '发送房间信令 (Outbound Room Signaling)\n└─ ${XmaxLogger.localized('内容：', 'Content: ')}$message';
     }
   }
 

@@ -166,7 +166,7 @@ final class XmaxRealtimeConnectionManager {
   static void _logCleanupFailure(String title, Object error) {
     XmaxLogger.error(
       category: XmaxLoggerCategory.realtime,
-      message: '$title\n└─ 原因：$error',
+      message: '$title\n└─ ${XmaxLogger.localized('原因：', 'Reason: ')}$error',
     );
   }
 

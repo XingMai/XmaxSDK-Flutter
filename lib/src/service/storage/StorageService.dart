@@ -167,10 +167,10 @@ final class StorageService implements StorageServicing {
         category: XmaxLoggerCategory.storage,
         message:
             '开始上传 (Upload Started)\n'
-            '├─ 类型：${mediaType.value}\n'
-            '├─ 分辨率：--\n'
-            '├─ 大小：${_formatByteCount(byteCount)}\n'
-            '└─ 安全检测：$checksSafety',
+            '├─ ${XmaxLogger.localized('类型：', 'Type: ')}${mediaType.value}\n'
+            '├─ ${XmaxLogger.localized('分辨率：', 'Resolution: ')}--\n'
+            '├─ ${XmaxLogger.localized('大小：', 'Size: ')}${_formatByteCount(byteCount)}\n'
+            '└─ ${XmaxLogger.localized('安全检测：', 'Safety Check: ')}$checksSafety',
       );
 
       final temporary = await _fetchStorageConfiguration();
@@ -201,14 +201,12 @@ final class StorageService implements StorageServicing {
         category: XmaxLoggerCategory.storage,
         message:
             '上传完成 (Upload Completed)\n'
-            '├─ 地址：${result.url}\n'
-            '└─ 耗时：${_formatDuration(startedAt)}',
+            '├─ ${XmaxLogger.localized('地址：', 'URL: ')}${result.url}\n'
+            '└─ ${XmaxLogger.localized('耗时：', 'Duration: ')}${_formatDuration(startedAt)}',
       );
       return result;
     } on XmaxError catch (error) {
-      if (error.code != XmaxErrorCode.uploadError) {
-        _logUploadFailure(error, startedAt);
-      }
+      _logUploadFailure(error, startedAt);
       rethrow;
     } catch (error) {
       if (ErrorNormalizer.isCancellation(error)) {
@@ -223,6 +221,7 @@ final class StorageService implements StorageServicing {
         code: XmaxErrorCode.uploadError,
         message: ErrorMessageFormatter.format(error),
       );
+      _logUploadFailure(uploadError, startedAt);
       throw uploadError;
     }
   }
@@ -257,9 +256,9 @@ final class StorageService implements StorageServicing {
       category: XmaxLoggerCategory.storage,
       message:
           '上传失败 (Upload Failed)\n'
-          '├─ 错误码：${error.code.value}\n'
-          '├─ 原因：${error.message}\n'
-          '└─ 耗时：${_formatDuration(startedAt)}',
+          '├─ ${XmaxLogger.localized('错误码：', 'Error Code: ')}${error.code.value}\n'
+          '├─ ${XmaxLogger.localized('原因：', 'Reason: ')}${error.message}\n'
+          '└─ ${XmaxLogger.localized('耗时：', 'Duration: ')}${_formatDuration(startedAt)}',
     );
   }
 

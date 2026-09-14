@@ -27,13 +27,19 @@ void main() {
   test('a failing diagnostic sink cannot suppress the original error', () {
     XmaxLogger.setSink((_, _) => throw StateError('sink failed'));
     final received = <XmaxError>[];
-    final handler = RealtimeErrorHandler()..setListener(received.add);
+    final handler = RealtimeErrorHandler()..setFailureHandler(received.add);
     const error = XmaxError(
       code: XmaxErrorCode.timeout,
       message: 'Realtime generation start timed out',
     );
 
     expect(handler.report(error), same(error));
+    expect(
+      received,
+      isEmpty,
+      reason: 'Method failures only throw to their caller',
+    );
+    handler.forward(error);
     expect(received.single, same(error));
   });
 }

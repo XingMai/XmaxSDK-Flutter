@@ -47,7 +47,7 @@ void main() {
       300,
       scrollable: find.byType(Scrollable).first,
     );
-    expect(find.text('自定义轨迹渲染'), findsOneWidget);
+    expect(find.text('自定义轨迹渲染'), findsNothing);
     expect(find.text('存储服务'), findsOneWidget);
   });
 }

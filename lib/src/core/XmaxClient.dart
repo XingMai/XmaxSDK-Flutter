@@ -20,14 +20,20 @@ final class XmaxClient {
         apiKey: configuration.apiKey,
         environment: configuration.environment,
       ) {
-    XmaxLogger.configure(options: configuration.loggerOptions);
+    XmaxLogger.configure(
+      options: configuration.loggerOptions,
+      environment: configuration.environment,
+    );
   }
 
   XmaxClient.internal({
     required this.configuration,
     required ApiServicing apiService,
   }) : _apiService = apiService {
-    XmaxLogger.configure(options: configuration.loggerOptions);
+    XmaxLogger.configure(
+      options: configuration.loggerOptions,
+      environment: configuration.environment,
+    );
   }
 
   final XmaxConfiguration configuration;

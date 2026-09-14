@@ -272,25 +272,6 @@ class _HomePageState extends State<HomePage> {
               ),
               const SizedBox(height: 14),
               _FeatureCard(
-                category: 'SDK RENDERING / TRAJECTORY',
-                watermark: 'FX',
-                title: t('feed.render.title'),
-                subtitle: t('feed.render.subtitle'),
-                tags: const <String>['CANVAS', 'MULTI-TOUCH', 'CUSTOM EFFECT'],
-                color: XLabPalette.pink,
-                icon: Icons.gesture_rounded,
-                iconLabel: 'RENDER',
-                onTap: () => _open(
-                  (apiKey, environment, model) => RealtimePage(
-                    apiKey: apiKey,
-                    environment: environment,
-                    model: model,
-                    customTrajectory: true,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 14),
-              _FeatureCard(
                 category: 'SDK SERVICE / STORAGE',
                 watermark: 'URL',
                 title: t('feed.storage.title'),

@@ -1,0 +1,5 @@
+.build/
+.swiftpm/
+Pods/
+Podfile.lock
+*.xcuserstate

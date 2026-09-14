@@ -34,3 +34,10 @@ dev_dependencies:
     sdk: flutter
 
 flutter:
+  plugin:
+    platforms:
+      android:
+        package: ai.xmax.sdk
+        pluginClass: XmaxSDKPlugin
+      ios:
+        pluginClass: XmaxSDKPlugin

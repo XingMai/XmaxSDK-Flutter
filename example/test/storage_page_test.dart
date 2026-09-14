@@ -1,7 +1,7 @@
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:file_selector_platform_interface/file_selector_platform_interface.dart';
+import 'package:image_picker_platform_interface/image_picker_platform_interface.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xmax_sdk_example/features/storage/storage_page.dart';
@@ -18,9 +18,10 @@ void main() {
       '${Directory.current.path}/android/app/src/main/res/mipmap-mdpi/'
       'ic_launcher.png',
     );
-    final originalPlatform = FileSelectorPlatform.instance;
-    FileSelectorPlatform.instance = _FileSelectorStub(imageFile);
-    addTearDown(() => FileSelectorPlatform.instance = originalPlatform);
+    final originalPlatform = ImagePickerPlatform.instance;
+    final picker = _GalleryPickerStub(imageFile);
+    ImagePickerPlatform.instance = picker;
+    addTearDown(() => ImagePickerPlatform.instance = originalPlatform);
 
     await tester.pumpWidget(
       const MaterialApp(home: StoragePage(apiKey: 'test-api-key')),
@@ -35,6 +36,8 @@ void main() {
       find.byKey(const ValueKey<String>('storage-media-preview')),
     );
     await tester.pump();
+    expect(picker.options?.allowMultiple, isFalse);
+    expect(picker.options?.imageOptions.requestFullMetadata, isFalse);
     expect(find.text('Image'), findsOneWidget);
     expect(find.text('Reselect'), findsOneWidget);
     expect(find.text('Upload & check'), findsOneWidget);
@@ -56,9 +59,9 @@ void main() {
       'ic_launcher.png',
     );
 
-    final originalPlatform = FileSelectorPlatform.instance;
-    FileSelectorPlatform.instance = _FileSelectorStub(imageFile);
-    addTearDown(() => FileSelectorPlatform.instance = originalPlatform);
+    final originalPlatform = ImagePickerPlatform.instance;
+    ImagePickerPlatform.instance = _GalleryPickerStub(imageFile);
+    addTearDown(() => ImagePickerPlatform.instance = originalPlatform);
 
     await tester.pumpWidget(
       const MaterialApp(home: StoragePage(apiKey: 'test-api-key')),
@@ -105,15 +108,15 @@ final class _ReadTrackingXFile extends XFile {
   }
 }
 
-final class _FileSelectorStub extends FileSelectorPlatform {
-  _FileSelectorStub(this.file);
+final class _GalleryPickerStub extends ImagePickerPlatform {
+  _GalleryPickerStub(this.file);
 
   final XFile file;
+  MediaOptions? options;
 
   @override
-  Future<XFile?> openFile({
-    List<XTypeGroup>? acceptedTypeGroups,
-    String? initialDirectory,
-    String? confirmButtonText,
-  }) async => file;
+  Future<List<XFile>> getMedia({required MediaOptions options}) async {
+    this.options = options;
+    return <XFile>[file];
+  }
 }

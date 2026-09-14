@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:xmax_sdk/src/core/XmaxEnvironment.dart';
 import 'package:xmax_sdk/src/foundation/logging/XmaxLogger.dart';
 import 'package:xmax_sdk/src/foundation/logging/XmaxLoggerOption.dart';
 import 'package:xmax_sdk/src/service/network/ApiLogger.dart';
@@ -17,6 +18,34 @@ void main() {
   });
 
   tearDown(XmaxLogger.reset);
+
+  test(
+    'global environment translates API details but preserves request and error text',
+    () {
+      XmaxLogger.configure(
+        options: XmaxLoggerOption.all,
+        environment: XmaxEnvironment.global,
+      );
+      expect(
+        ApiLogger.responseMessage(
+          method: ApiMethod.get,
+          path: '/session',
+          statusCode: 200,
+          bodyByteCount: 64,
+          durationMs: 12,
+        ),
+        'GET /session\n├─ Status: 200\n├─ Duration: 12 ms\n└─ Response Size: 64 bytes',
+      );
+      ApiLogger.logFailure(
+        method: ApiMethod.post,
+        path: '/session',
+        error: StateError('服务端原文'),
+        durationMs: 12,
+      );
+      expect(records.single.message, contains('失败 (Request Failed)'));
+      expect(records.single.message, contains('└─ Reason: Bad state: 服务端原文'));
+    },
+  );
 
   test('responseMessage matches the iOS layout', () {
     expect(

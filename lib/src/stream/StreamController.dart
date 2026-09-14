@@ -75,7 +75,7 @@ final class StreamController implements StreamControlling {
   RemoteStream? _activeRemoteStream;
   String? _subscribedRemoteAudioStreamID;
   Future<void>? _audioActivation;
-  int _remoteAudioVolumePercentage = 0;
+  int _remoteAudioVolumePercentage = 100;
   int _audioSubscriptionVersion = 0;
   String? _generationTaskID;
   Completer<void>? _generationCompleter;
@@ -85,6 +85,9 @@ final class StreamController implements StreamControlling {
 
   @override
   bool get hasGenerationTask => _generationTaskID != null;
+
+  @override
+  double get remoteAudioVolume => _remoteAudioVolumePercentage / 100;
 
   @override
   Future<void> setVideoEncoderConfig(RealtimeVideoFormat videoFormat) =>
@@ -287,10 +290,10 @@ final class StreamController implements StreamControlling {
         category: XmaxLoggerCategory.stream,
         message:
             '生成确认超时 (Generation Confirmation Timed Out)\n'
-            '├─ taskID：$taskID\n'
-            '├─ 视频订阅数：${_remoteVideoSubscriptions.length}\n'
-            '├─ 收到 SEI：$_receivedGenerationSeiCount\n'
-            '└─ 来自目标远端的 SEI：$_expectedRemoteSeiCount',
+            '├─ ${XmaxLogger.localized('taskID：', 'taskID: ')}$taskID\n'
+            '├─ ${XmaxLogger.localized('视频订阅数：', 'Video Subscriptions: ')}${_remoteVideoSubscriptions.length}\n'
+            '├─ ${XmaxLogger.localized('收到 SEI：', 'Received SEI: ')}$_receivedGenerationSeiCount\n'
+            '└─ ${XmaxLogger.localized('来自目标远端的 SEI：', 'SEI from Expected Remote: ')}$_expectedRemoteSeiCount',
       );
       _rejectGeneration(
         const XmaxError(
@@ -499,8 +502,8 @@ final class StreamController implements StreamControlling {
           category: XmaxLoggerCategory.stream,
           message:
               '忽略不匹配的生成 SEI (Ignored Generation SEI)\n'
-              '├─ task 匹配：$matchesTask\n'
-              '└─ room/bot 匹配：$expectedRemote',
+              '├─ ${XmaxLogger.localized('task 匹配：', 'Task Match: ')}$matchesTask\n'
+              '└─ ${XmaxLogger.localized('room/bot 匹配：', 'Room/Bot Match: ')}$expectedRemote',
         );
       }
       return;
@@ -508,7 +511,8 @@ final class StreamController implements StreamControlling {
 
     XmaxLogger.debug(
       category: XmaxLoggerCategory.stream,
-      message: '生成 SEI 确认成功 (Generation SEI Confirmed)\n└─ taskID：$taskID',
+      message:
+          '生成 SEI 确认成功 (Generation SEI Confirmed)\n└─ ${XmaxLogger.localized('taskID：', 'taskID: ')}$taskID',
     );
     _activeRemoteStream = stream;
     _remoteStreamListener?.call(stream);
@@ -613,7 +617,7 @@ final class StreamController implements StreamControlling {
         message:
             '清理 RTC 远端生成流失败 '
             '(Failed to Clean Up RTC Remote Generation Stream)\n'
-            '└─ 原因：$error',
+            '└─ ${XmaxLogger.localized('原因：', 'Reason: ')}$error',
       );
     }
   }
@@ -624,7 +628,7 @@ final class StreamController implements StreamControlling {
     } catch (error) {
       XmaxLogger.error(
         category: XmaxLoggerCategory.stream,
-        message: '$title\n└─ 原因：$error',
+        message: '$title\n└─ ${XmaxLogger.localized('原因：', 'Reason: ')}$error',
       );
     }
   }

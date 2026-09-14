@@ -466,10 +466,15 @@ touch interaction by default, and returns to the local preview after
 
 Camera generation audio is muted by default. To hear it, call
 `await _realtime.setRemoteAudioVolume(0.8)` after creating the local stream;
-the setting is applied when the generated stream is selected. The Flutter
-camera-only SDK has no local file-video audio preview, so
-`setLocalAudioVolume()` reports an unsupported configuration instead of
-silently doing nothing.
+the setting is applied when the generated stream is selected. Read it with
+`await _realtime.remoteAudioVolume` (rounded to hundredths). Stopping generation
+or disconnecting preserves the setting; creating a new camera stream resets it
+to zero. Before the first stream is created, remote volume defaults to `1.0`.
+
+The camera-only SDK has no local file-video audio preview. Matching iOS,
+`await _realtime.localAudioVolume` returns `0.45`, and valid calls to
+`setLocalAudioVolume()` succeed without changing it. Both volume setters reject
+non-finite values and values outside `0...1`.
 
 To update an active generation task, submit a new context without another local
 stream:
@@ -499,8 +504,6 @@ input stream or starting generation.
 | Listener | Purpose |
 | --- | --- |
 | `setStateListener` | Observe `idle → preparing → ready → connecting → connected → generating` and any failure reason. `ready` follows the first camera frame and mounted preview. |
-| `setErrorListener` | Handle fatal errors that prevent the realtime workflow from continuing. |
-| `setCameraPreviewReadyListener` | Optional callback when the first camera frame and preview are ready; `setStateListener` also reports `ready`. |
 | `setNetworkQualityListener` | Monitor uplink and downlink network quality. |
 | `setPerformanceAlarmListener` | Detect device performance limitations or recovery, with a suggested video format when available. |
 
@@ -509,12 +512,15 @@ For example, monitor state changes and errors:
 ```dart
 await realtime.setStateListener((state) {
   debugPrint('State: ${state.connectionState.value}');
-});
-
-await realtime.setErrorListener((error) {
-  debugPrint('Error: ${error.code.value} ${error.message}');
+  final error = state.reason?.error;
+  if (error != null) {
+    debugPrint('Error: ${error.code.value} ${error.message}');
+  }
 });
 ```
+
+Handle errors from explicit method calls with `try` / `catch` around the awaited
+call. Runtime failures are reported through `state.reason?.error`.
 
 <br>
 
@@ -614,6 +620,13 @@ final client = XmaxClient(
 ```
 
 Logging configuration is process-wide and shared by all `XmaxClient` instances.
+Log titles remain bilingual. Detail labels use Chinese for `XmaxEnvironment.china`
+and English for `XmaxEnvironment.global`; the most recently created client's
+configuration applies process-wide, matching the iOS SDK.
+
+Enabled logs are sent to iOS unified logging (`ai.xmax.XmaxSDK` / `XmaxSDK`)
+or Android Logcat (`XmaxSDK`), and are also available in Dart DevTools. Native
+logging is registered automatically with the SDK; no host-app setup is required.
 
 <br>
 

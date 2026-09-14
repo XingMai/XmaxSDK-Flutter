@@ -1,16 +1,30 @@
+import 'dart:async';
 import 'dart:developer' as developer;
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 
+import '../../core/XmaxEnvironment.dart';
 import 'XmaxLoggerOption.dart';
 
 abstract final class XmaxLogger {
   static XmaxLoggerOption _options = const XmaxLoggerOption(rawValue: 0);
+  static XmaxEnvironment _environment = XmaxEnvironment.china;
   static XmaxLogSink _sink = _defaultSink;
+  static const _channel = MethodChannel('ai.xmax.sdk/logging');
 
-  static void configure({required XmaxLoggerOption options}) {
+  /// Process-wide like iOS: the most recently configured client wins.
+  static void configure({
+    required XmaxLoggerOption options,
+    XmaxEnvironment environment = XmaxEnvironment.china,
+  }) {
     _options = options;
+    _environment = environment;
   }
+
+  /// Localizes SDK-owned details only; titles and external payloads stay intact.
+  static String localized(String chinese, String english) =>
+      _environment == XmaxEnvironment.china ? chinese : english;
 
   static bool isEnabled(XmaxLoggerOption option) => _options.contains(option);
 
@@ -68,10 +82,29 @@ abstract final class XmaxLogger {
 
   static void _defaultSink(XmaxLogLevel level, String message) {
     developer.log(message, name: 'ai.xmax.XmaxSDK', level: level.value);
-    // developer.log only emits DevTools events. Mirror enabled SDK logs to
-    // Flutter's throttled console output for Xcode/Android Studio, including
-    // Profile and Release builds; loggerOptions remains the opt-in switch.
-    debugPrint(message);
+    if (kIsWeb ||
+        (defaultTargetPlatform != TargetPlatform.iOS &&
+            defaultTargetPlatform != TargetPlatform.android)) {
+      debugPrint(message);
+      return;
+    }
+
+    // Native output is independent of business operations and remains enabled
+    // in Profile/Release when explicitly requested through loggerOptions.
+    unawaited(_writeNative(level, message));
+  }
+
+  static Future<void> _writeNative(XmaxLogLevel level, String message) async {
+    try {
+      await _channel.invokeMethod<void>('log', <String, String>{
+        'level': level.name,
+        'message': message,
+      });
+    } catch (_) {
+      // Tests, early startup or a host missing plugin registration must still
+      // have diagnostics. Never report logging errors through the SDK itself.
+      debugPrint(message);
+    }
   }
 
   @visibleForTesting
@@ -82,6 +115,7 @@ abstract final class XmaxLogger {
   @visibleForTesting
   static void reset() {
     _options = const XmaxLoggerOption(rawValue: 0);
+    _environment = XmaxEnvironment.china;
     _sink = _defaultSink;
   }
 }

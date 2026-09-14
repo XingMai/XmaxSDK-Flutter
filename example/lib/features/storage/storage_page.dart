@@ -2,9 +2,9 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
 
-import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:video_player/video_player.dart';
 import 'package:xmax_sdk/xmax_sdk.dart';
 
@@ -53,34 +53,27 @@ class _StoragePageState extends State<StoragePage> {
   Future<void> _pick() async {
     if (_picking || _uploading) return;
 
-    final mediaTypes = XTypeGroup(
-      label: XLabLocalization.shared.text('storage.select'),
-      extensions: <String>[
-        'jpg',
-        'jpeg',
-        'png',
-        'webp',
-        'gif',
-        'mp4',
-        'mov',
-        'm4v',
-      ],
-      uniformTypeIdentifiers: <String>['public.image', 'public.movie'],
-      mimeTypes: <String>['image/*', 'video/*'],
-    );
-
+    setState(() => _picking = true);
     try {
-      final file = await openFile(acceptedTypeGroups: <XTypeGroup>[mediaTypes]);
+      final file = await ImagePicker().pickMedia(requestFullMetadata: false);
       if (file == null || !mounted) return;
 
       final extension = file.name.split('.').last.toLowerCase();
-      final isImage = <String>{
-        'jpg',
-        'jpeg',
-        'png',
-        'webp',
-        'gif',
-      }.contains(extension);
+      final isImage =
+          file.mimeType?.startsWith('image/') ??
+          <String>{
+            'jpg',
+            'jpeg',
+            'png',
+            'webp',
+            'gif',
+            'heic',
+            'heif',
+            'avif',
+            'bmp',
+            'tif',
+            'tiff',
+          }.contains(extension);
       final selectionVersion = ++_selectionVersion;
 
       if (isImage) {
@@ -94,6 +87,8 @@ class _StoragePageState extends State<StoragePage> {
           () => _error = XLabLocalization.shared.text('storage.file.error'),
         );
       }
+    } finally {
+      if (mounted) setState(() => _picking = false);
     }
   }
 

@@ -104,7 +104,7 @@ final class CameraController {
           category: XmaxLoggerCategory.realtime,
           message:
               '回滚 RTC 相机采集失败 (Failed to Roll Back RTC Camera Capture)\n'
-              '└─ 原因：$cleanupError',
+              '└─ ${XmaxLogger.localized('原因：', 'Reason: ')}$cleanupError',
         );
       }
       throw XmaxError.from(error);

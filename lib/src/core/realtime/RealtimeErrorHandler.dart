@@ -4,47 +4,33 @@ import '../../foundation/logging/XmaxLogger.dart';
 import '../../service/realtime/RealtimeError.dart';
 
 final class RealtimeErrorHandler {
-  RealtimeErrorListener? _listener;
+  RealtimeErrorListener? _failureHandler;
 
-  void setListener(RealtimeErrorListener? listener) {
-    _listener = listener;
+  void setFailureHandler(RealtimeErrorListener? handler) {
+    _failureHandler = handler;
   }
 
   XmaxError report(Object error) {
     final xmaxError = XmaxError.from(error);
-    _notify(xmaxError);
+    _log(xmaxError);
     return xmaxError;
   }
 
   void forward(XmaxError error) {
-    _notify(error);
+    _log(error);
+    _failureHandler?.call(error);
   }
 
-  void _notify(XmaxError error) {
+  void _log(XmaxError error) {
     try {
       XmaxLogger.error(
         category: XmaxLoggerCategory.realtime,
         message:
             '实时操作失败 (Realtime Operation Failed)\n'
-            '└─ 原因：${ErrorMessageFormatter.format(error)}',
+            '└─ ${XmaxLogger.localized('原因：', 'Reason: ')}${ErrorMessageFormatter.format(error)}',
       );
     } catch (_) {
       // A diagnostic sink must not prevent delivery of the original error.
-    }
-
-    try {
-      _listener?.call(error);
-    } catch (listenerError) {
-      try {
-        XmaxLogger.error(
-          category: XmaxLoggerCategory.realtime,
-          message:
-              '错误监听器执行失败 (Error Listener Failed)\n'
-              '└─ 原因：${ErrorMessageFormatter.format(listenerError)}',
-        );
-      } catch (_) {
-        // Listener and diagnostic failures must never replace the SDK error.
-      }
     }
   }
 }

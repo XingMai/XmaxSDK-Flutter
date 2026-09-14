@@ -171,27 +171,17 @@ class _RealtimePageState extends State<RealtimePage>
             state.taskID == null) {
           _lastError = null;
         }
+        final error = state.reason?.error;
+        if (error != null) {
+          _lastError = error;
+          _isLoading = false;
+          _isCameraSwitchWaitingForGeneration = false;
+          _isSwitchingCamera = false;
+        }
       });
     });
-    _manager.setErrorListener((error) {
-      if (!mounted || _isSuspendedForBackground) return;
-      setState(() => _lastError = error);
-    });
-    _manager.setPerformanceAlarmListener((alarm) {
-      if (mounted &&
-          !_isSuspendedForBackground &&
-          _lastError == null &&
-          alarm.status == RealtimePerformanceStatus.limited) {
-        setState(() {
-          _lastError = XmaxError(
-            code: XmaxErrorCode.mediaError,
-            message: XLabLocalization.shared.text(
-              'realtime.performance.limited',
-            ),
-          );
-        });
-      }
-    });
+    // Performance alarms remain available in SDK logs; XLab does not promote
+    // transient quality warnings to user-facing errors.
   }
 
   Future<void> _startCamera() async {
@@ -606,8 +596,6 @@ class _RealtimePageState extends State<RealtimePage>
     _routeAnimation?.removeStatusListener(_routeAnimationDidChange);
     WidgetsBinding.instance.removeObserver(this);
     _manager.setStateListener(null);
-    _manager.setErrorListener(null);
-    _manager.setPerformanceAlarmListener(null);
     unawaited(_manager.close());
     _promptController.removeListener(_promptDidChange);
     _promptController.dispose();

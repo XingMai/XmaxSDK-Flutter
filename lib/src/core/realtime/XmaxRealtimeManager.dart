@@ -11,14 +11,12 @@ import '../../render/RenderController.dart';
 import '../../service/media/MediaService.dart';
 import '../../service/network/ApiServicing.dart';
 import '../../service/realtime/RealtimeContext.dart';
-import '../../service/realtime/RealtimeError.dart';
 import '../../service/realtime/RealtimeMediaStream.dart';
 import '../../service/realtime/RealtimeNetworkQuality.dart';
 import '../../service/realtime/RealtimePerformanceAlarm.dart';
 import '../../service/realtime/RealtimeSessionService.dart';
 import '../../service/realtime/RealtimeState.dart';
 import '../../service/realtime/RealtimeVideoFormat.dart';
-import '../../service/realtime/RealtimeVideoTrack.dart';
 import '../../stream/StreamController.dart';
 import '../../stream/StreamControlling.dart';
 import 'RealtimeConfiguration.dart';
@@ -91,6 +89,9 @@ final class XmaxRealtimeManager implements XmaxRealtimeManaging {
     _mediaController.setCameraPreviewReadyListener(
       _cameraPreviewDidBecomeReady,
     );
+    _errorHandler.setFailureHandler((error) {
+      unawaited(_handleStreamFailure(error));
+    });
   }
 
   @override
@@ -105,7 +106,6 @@ final class XmaxRealtimeManager implements XmaxRealtimeManaging {
     connectionState: RealtimeConnectionState.idle,
   );
   RealtimeStateListener? _stateListener;
-  RealtimeCameraPreviewReadyListener? _cameraPreviewReadyListener;
   int _operationVersion = 0;
   int _generationRequestVersion = 0;
   int _generationCancellationVersion = 0;
@@ -120,24 +120,16 @@ final class XmaxRealtimeManager implements XmaxRealtimeManaging {
   Future<RealtimeState> get currentState async => _state;
 
   @override
+  Future<double> get localAudioVolume => _mediaController.localAudioVolume;
+
+  @override
+  Future<double> get remoteAudioVolume async =>
+      _streamController.remoteAudioVolume;
+
+  @override
   Future<void> setStateListener(RealtimeStateListener? listener) async {
     _stateListener = listener;
     listener?.call(_state);
-  }
-
-  @override
-  Future<void> setErrorListener(RealtimeErrorListener? listener) async {
-    _errorHandler.setListener(listener);
-  }
-
-  @override
-  Future<void> setCameraPreviewReadyListener(
-    RealtimeCameraPreviewReadyListener? listener,
-  ) async {
-    _cameraPreviewReadyListener = listener;
-    if (_state.connectionState == RealtimeConnectionState.ready) {
-      listener?.call();
-    }
   }
 
   @override
@@ -215,6 +207,11 @@ final class XmaxRealtimeManager implements XmaxRealtimeManaging {
 
     try {
       final stream = await creation;
+      _ensureCurrent(version);
+      // Defaults belong to the newly created source, not the Manager lifetime.
+      // Apply only after successful creation; close/cancel must not reset a
+      // later source's settings through an obsolete creation completion.
+      await _streamController.setRemoteAudioVolume(0);
       _ensureCurrent(version);
       return stream;
     } catch (error) {
@@ -450,18 +447,20 @@ final class XmaxRealtimeManager implements XmaxRealtimeManaging {
   }
 
   @override
-  Future<void> close() {
+  Future<void> close() => _closeWithReason(RealtimeReason.normal);
+
+  Future<void> _closeWithReason(RealtimeReason reason) {
     final active = _closeFuture;
     if (active != null) {
       return active;
     }
 
-    final future = _performClose();
+    final future = _performClose(reason);
     _closeFuture = future;
     return future.whenComplete(() => _closeFuture = null);
   }
 
-  Future<void> _performClose() async {
+  Future<void> _performClose(RealtimeReason reason) async {
     _operationVersion += 1;
     await disconnect();
 
@@ -476,9 +475,9 @@ final class XmaxRealtimeManager implements XmaxRealtimeManaging {
     try {
       await _mediaController.stopLocalStream();
       _emit(
-        const RealtimeState(
+        RealtimeState(
           connectionState: RealtimeConnectionState.idle,
-          reason: RealtimeReason.normal,
+          reason: reason,
         ),
       );
     } catch (error) {
@@ -617,7 +616,7 @@ final class XmaxRealtimeManager implements XmaxRealtimeManaging {
       return _PreparedGenerationTask(readiness: completer.future);
     } catch (error) {
       // Supersession is an internal control-flow event, matching a cancelled
-      // Swift Task. It must not be surfaced to the SDK error listener.
+      // Swift Task. It must not be reported as a new runtime failure.
       if (requestVersion != _generationRequestVersion) {
         throw XmaxError.from(error);
       }
@@ -759,6 +758,24 @@ final class XmaxRealtimeManager implements XmaxRealtimeManaging {
     await _performDisconnect(reason: RealtimeReason.failure(xmaxError));
   }
 
+  Future<void> _handleStreamFailure(XmaxError error) async {
+    // Method failures belong to their caller's Future. Only unsolicited RTC
+    // failures enter this path and terminate the affected active lifecycle.
+    if (_closeFuture != null ||
+        _state.connectionState == RealtimeConnectionState.idle ||
+        _state.connectionState == RealtimeConnectionState.disconnecting) {
+      return;
+    }
+
+    final reason = RealtimeReason.failure(error);
+    if (_state.connectionState == RealtimeConnectionState.preparing ||
+        _state.connectionState == RealtimeConnectionState.ready) {
+      await _closeWithReason(reason);
+    } else {
+      await disconnect(reason: reason);
+    }
+  }
+
   void _cameraPreviewDidBecomeReady() {
     if (_mediaController.currentTrack == null) return;
 
@@ -767,7 +784,6 @@ final class XmaxRealtimeManager implements XmaxRealtimeManaging {
         const RealtimeState(connectionState: RealtimeConnectionState.ready),
       );
     }
-    _cameraPreviewReadyListener?.call();
   }
 
   void _emit(RealtimeState state) {

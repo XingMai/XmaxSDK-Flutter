@@ -1,12 +1,10 @@
 import '../../foundation/media/camera/CameraPosition.dart';
 import '../../service/realtime/RealtimeContext.dart';
-import '../../service/realtime/RealtimeError.dart';
 import '../../service/realtime/RealtimeMediaStream.dart';
 import '../../service/realtime/RealtimeNetworkQuality.dart';
 import '../../service/realtime/RealtimePerformanceAlarm.dart';
 import '../../service/realtime/RealtimeState.dart';
 import '../../service/realtime/RealtimeVideoFormat.dart';
-import '../../service/realtime/RealtimeVideoTrack.dart';
 import 'RealtimeConfiguration.dart';
 
 /// 定义 SDK 对接入方提供的实时媒体与生成控制能力。
@@ -17,21 +15,20 @@ abstract interface class XmaxRealtimeManaging {
   /// 当前实时连接与生成状态。
   Future<RealtimeState> get currentState;
 
+  /// 当前本地媒体预览音量，范围为 `0...1`。
+  /// 摄像头没有本地音频播放器，返回与 iOS 一致的默认值 `0.45`。
+  Future<double> get localAudioVolume;
+
+  /// 当前远端音频播放音量，范围为 `0...1`，按百分之一量化。
+  /// 新建 Manager 时为 `1.0`；每次成功创建摄像头流后重置为 `0`。
+  Future<double> get remoteAudioVolume;
+
   /// 设置实时状态监听器。
   ///
   /// 设置后会立即回调当前状态；传入 `null` 时清除监听器。
+  /// 预览就绪通过 `ready` 通知；运行失败通过 `state.reason?.error` 通知。
+  /// 主动调用方法产生的错误仍由对应 Future 抛出。
   Future<void> setStateListener(RealtimeStateListener? listener);
-
-  /// 设置实时错误监听器；传入 `null` 时清除监听器。
-  Future<void> setErrorListener(RealtimeErrorListener? listener);
-
-  /// 设置摄像头预览就绪监听器。
-  ///
-  /// 本地摄像头首帧可用且预览视图已挂载时回调；传入 `null` 时清除监听器。
-  /// 接入方也可通过 [setStateListener] 观察 `ready` 状态。
-  Future<void> setCameraPreviewReadyListener(
-    RealtimeCameraPreviewReadyListener? listener,
-  );
 
   /// 设置网络质量监听器。
   ///
@@ -49,15 +46,17 @@ abstract interface class XmaxRealtimeManaging {
 
   /// 设置本地媒体预览音量。
   ///
-  /// [volume] 的取值范围为 `0...1`。当前仅支持摄像头输入，没有本地
-  /// 文件视频的音频预览；调用会以 `invalidConfiguration` 失败。
+  /// [volume] 必须是 `0...1` 内的有限数值，否则抛出 `invalidConfiguration`。
+  /// 摄像头没有本地音频播放器，合法调用不产生效果，也不改变读取值；
+  /// 与 iOS 一致。这不是麦克风采集音量控制。
   Future<void> setLocalAudioVolume(double volume);
 
   /// 设置远端生成音频的播放音量。
   ///
   /// [volume] 的取值范围为 `0...1`。尚未连接或订阅远端流时，
   /// SDK 会保存配置，并在生成流确认后订阅远端音频前应用。
-  /// 摄像头流默认静音；需要播放生成音频时，请显式设置大于零的音量。
+  /// 每次创建摄像头流后默认静音；需要覆盖默认值时，请在创建流后设置。
+  /// 停止生成或断开连接保留音量；RTC 设置失败时保留上次成功的值。
   Future<void> setRemoteAudioVolume(double volume);
 
   /// 创建本地摄像头流并开始预览。

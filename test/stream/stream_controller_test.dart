@@ -195,7 +195,9 @@ void main() {
       qualityController: _FakeQuality(),
     );
 
-    await controller.setRemoteAudioVolume(0.63);
+    expect(controller.remoteAudioVolume, 1);
+    await controller.setRemoteAudioVolume(0.634);
+    expect(controller.remoteAudioVolume, 0.63);
     await controller.connect(
       connection: const RealtimeSessionConnection(
         roomID: 'room',
@@ -232,9 +234,19 @@ void main() {
 
     await controller.setRemoteAudioVolume(0.4);
     expect(rtc.audioVolumes.last, ('bot-audio', 40));
+    expect(controller.remoteAudioVolume, 0.4);
+    rtc.audioVolumeError = StateError('native volume failed');
+    await expectLater(controller.setRemoteAudioVolume(0.8), throwsStateError);
+    expect(
+      controller.remoteAudioVolume,
+      0.4,
+      reason: 'Failed native calls do not commit volume',
+    );
+    rtc.audioVolumeError = null;
 
     await controller.stopGeneration(taskID: 'task-1');
     expect(rtc.audioSubscriptions.last, ('bot-audio', false));
+    expect(controller.remoteAudioVolume, 0.4);
   });
 
   test('camera audio starts muted and is unsubscribed on disconnect', () async {
@@ -245,6 +257,9 @@ void main() {
       encodingController: _FakeEncoding(),
       qualityController: _FakeQuality(),
     );
+    // The realtime Manager applies the camera-source default after creation.
+    expect(controller.remoteAudioVolume, 1);
+    await controller.setRemoteAudioVolume(0);
     await controller.connect(
       connection: const RealtimeSessionConnection(
         roomID: 'room',
@@ -590,6 +605,7 @@ final class _FakeRtc implements RtcManaging {
   final Object? roomMessageError;
   RtcEventListener? listener;
   Completer<void>? audioSubscribeGate;
+  Object? audioVolumeError;
   final List<(String, bool)> audioSubscriptions = <(String, bool)>[];
   final List<(String, int)> audioVolumes = <(String, int)>[];
   final List<String> roomMessages = <String>[];
@@ -625,6 +641,8 @@ final class _FakeRtc implements RtcManaging {
     required int volume,
     required String streamID,
   }) async {
+    final error = audioVolumeError;
+    if (error != null) throw error;
     audioVolumes.add((streamID, volume));
   }
 

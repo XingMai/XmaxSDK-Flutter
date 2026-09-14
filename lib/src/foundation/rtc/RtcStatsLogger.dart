@@ -13,14 +13,14 @@ abstract final class RtcStatsLogger {
       category: XmaxLoggerCategory.rtc,
       message:
           '本地视频发送 (Local Video Uplink)\n'
-          '├─ 分辨率：${video.encodedFrameWidth} × ${video.encodedFrameHeight}\n'
-          '├─ 发送码率：${video.sentKBitrate} kbps\n'
-          '├─ 采集帧率：${video.inputFrameRate} fps\n'
-          '├─ 编码帧率：${video.encoderOutputFrameRate} fps\n'
-          '├─ 发送帧率：${video.sentFrameRate} fps\n'
-          '├─ 视频丢包率：${percentage(video.videoLossRate)}\n'
-          '├─ 网络往返时延：${video.rtt} ms\n'
-          '└─ 网络抖动：${video.jitter} ms',
+          '├─ ${XmaxLogger.localized('分辨率：', 'Resolution: ')}${video.encodedFrameWidth} × ${video.encodedFrameHeight}\n'
+          '├─ ${XmaxLogger.localized('发送码率：', 'Send Bitrate: ')}${video.sentKBitrate} kbps\n'
+          '├─ ${XmaxLogger.localized('采集帧率：', 'Capture Frame Rate: ')}${video.inputFrameRate} fps\n'
+          '├─ ${XmaxLogger.localized('编码帧率：', 'Encode Frame Rate: ')}${video.encoderOutputFrameRate} fps\n'
+          '├─ ${XmaxLogger.localized('发送帧率：', 'Send Frame Rate: ')}${video.sentFrameRate} fps\n'
+          '├─ ${XmaxLogger.localized('视频丢包率：', 'Video Packet Loss: ')}${percentage(video.videoLossRate)}\n'
+          '├─ ${XmaxLogger.localized('网络往返时延：', 'Round-Trip Time: ')}${video.rtt} ms\n'
+          '└─ ${XmaxLogger.localized('网络抖动：', 'Network Jitter: ')}${video.jitter} ms',
       option: XmaxLoggerOption.performance,
     );
   }
@@ -32,15 +32,15 @@ abstract final class RtcStatsLogger {
       category: XmaxLoggerCategory.rtc,
       message:
           '远端视频接收 (Remote Video Downlink)\n'
-          '├─ 分辨率：${video.width} × ${video.height}\n'
-          '├─ 接收码率：${video.receivedKBitrate} kbps\n'
-          '├─ 解码帧率：${video.decoderOutputFrameRate} fps\n'
-          '├─ 渲染帧率：${video.rendererOutputFrameRate} fps\n'
-          '├─ 视频丢包率：${percentage(video.videoLossRate)}\n'
-          '├─ 网络往返时延：${video.rtt} ms\n'
-          '├─ 卡顿次数：${video.stallCount} 次\n'
-          '├─ 卡顿时长：${video.stallDuration} ms\n'
-          '└─ 端到端时延：${video.e2eDelay} ms',
+          '├─ ${XmaxLogger.localized('分辨率：', 'Resolution: ')}${video.width} × ${video.height}\n'
+          '├─ ${XmaxLogger.localized('接收码率：', 'Receive Bitrate: ')}${video.receivedKBitrate} kbps\n'
+          '├─ ${XmaxLogger.localized('解码帧率：', 'Decode Frame Rate: ')}${video.decoderOutputFrameRate} fps\n'
+          '├─ ${XmaxLogger.localized('渲染帧率：', 'Render Frame Rate: ')}${video.rendererOutputFrameRate} fps\n'
+          '├─ ${XmaxLogger.localized('视频丢包率：', 'Video Packet Loss: ')}${percentage(video.videoLossRate)}\n'
+          '├─ ${XmaxLogger.localized('网络往返时延：', 'Round-Trip Time: ')}${video.rtt} ms\n'
+          '├─ ${XmaxLogger.localized('卡顿次数：', 'Stall Count: ')}${video.stallCount}${XmaxLogger.localized(' 次', '')}\n'
+          '├─ ${XmaxLogger.localized('卡顿时长：', 'Stall Duration: ')}${video.stallDuration} ms\n'
+          '└─ ${XmaxLogger.localized('端到端时延：', 'End-to-End Delay: ')}${video.e2eDelay} ms',
       option: XmaxLoggerOption.performance,
     );
   }
@@ -53,8 +53,8 @@ abstract final class RtcStatsLogger {
     final hasRemoteQuality = remoteQualities.isNotEmpty;
     final lines = <String>[
       '网络质量 (Network Quality Metrics)',
-      '${hasRemoteQuality ? '├─' : '└─'} 本地发送（上行）',
-      '${hasRemoteQuality ? '│  ' : '   '}├─ 质量：${networkQualityName(localQuality.txQuality)}',
+      '${hasRemoteQuality ? '├─' : '└─'} ${XmaxLogger.localized('本地发送（上行）', 'Local Uplink')}',
+      '${hasRemoteQuality ? '│  ' : '   '}├─ ${XmaxLogger.localized('质量：', 'Quality: ')}${networkQualityName(localQuality.txQuality)}',
       '${hasRemoteQuality ? '│  ' : '   '}└─ ${_networkMetrics(localQuality, includesRtt: true)}',
     ];
 
@@ -64,8 +64,12 @@ abstract final class RtcStatsLogger {
       final branch = isLast ? '└─' : '├─';
       final indent = isLast ? '   ' : '│  ';
       lines
-        ..add('$branch 远端接收 ${quality.uid}（下行）')
-        ..add('$indent├─ 质量：${networkQualityName(quality.rxQuality)}')
+        ..add(
+          '$branch ${XmaxLogger.localized('远端接收', 'Remote Downlink')} ${quality.uid}${XmaxLogger.localized('（下行）', '')}',
+        )
+        ..add(
+          '$indent├─ ${XmaxLogger.localized('质量：', 'Quality: ')}${networkQualityName(quality.rxQuality)}',
+        )
         ..add('$indent└─ ${_networkMetrics(quality, includesRtt: false)}');
     }
 
@@ -79,21 +83,21 @@ abstract final class RtcStatsLogger {
   static void logSystemStats(SysStats stats) {
     if (!XmaxLogger.isEnabled(XmaxLoggerOption.performance)) return;
     final cpu = <String>[
-      '应用 ${percentage(stats.cpuAppUsage)}',
-      '系统 ${percentage(stats.cpuTotalUsage)}',
-      '${stats.cpuCores} 核',
-    ].join('，');
+      '${XmaxLogger.localized('应用', 'App')} ${percentage(stats.cpuAppUsage)}',
+      '${XmaxLogger.localized('系统', 'System')} ${percentage(stats.cpuTotalUsage)}',
+      '${stats.cpuCores} ${XmaxLogger.localized('核', 'Cores')}',
+    ].join(XmaxLogger.localized('，', ', '));
     final memory = <String>[
-      '应用 ${stats.memoryUsage.toStringAsFixed(0)} MB',
-      '应用占用 ${stats.memoryRatio.toStringAsFixed(2)}%',
-      '系统占用 ${stats.totalMemoryRatio.toStringAsFixed(2)}%',
-    ].join('，');
+      '${XmaxLogger.localized('应用', 'App')} ${stats.memoryUsage.toStringAsFixed(0)} MB',
+      '${XmaxLogger.localized('应用占用', 'App Usage')} ${stats.memoryRatio.toStringAsFixed(2)}%',
+      '${XmaxLogger.localized('系统占用', 'System Usage')} ${stats.totalMemoryRatio.toStringAsFixed(2)}%',
+    ].join(XmaxLogger.localized('，', ', '));
     XmaxLogger.debug(
       category: XmaxLoggerCategory.rtc,
       message:
           '性能统计 (System Performance Metrics)\n'
-          '├─ CPU：$cpu\n'
-          '└─ 内存：$memory',
+          '├─ ${XmaxLogger.localized('CPU：', 'CPU: ')}$cpu\n'
+          '└─ ${XmaxLogger.localized('内存：', 'Memory: ')}$memory',
       option: XmaxLoggerOption.performance,
     );
   }
@@ -105,15 +109,17 @@ abstract final class RtcStatsLogger {
     if (!XmaxLogger.isEnabled(XmaxLoggerOption.performance)) return;
     final lines = <String>[
       '性能告警 (Performance Alert)',
-      '├─ reason：${reason.name}',
+      '├─ ${XmaxLogger.localized('reason：', 'reason: ')}${reason.name}',
     ];
     final state = performanceAlarmName(reason);
     if (data.width > 0 && data.height > 0 && data.frameRate > 0) {
       lines
-        ..add('├─ 状态：$state')
-        ..add('└─ 建议：${data.width} × ${data.height}，${data.frameRate} fps');
+        ..add('├─ ${XmaxLogger.localized('状态：', 'Status: ')}$state')
+        ..add(
+          '└─ ${XmaxLogger.localized('建议：', 'Recommendation: ')}${data.width} × ${data.height}${XmaxLogger.localized('，', ', ')}${data.frameRate} fps',
+        );
     } else {
-      lines.add('└─ 状态：$state');
+      lines.add('└─ ${XmaxLogger.localized('状态：', 'Status: ')}$state');
     }
     XmaxLogger.debug(
       category: XmaxLoggerCategory.rtc,
@@ -129,34 +135,50 @@ abstract final class RtcStatsLogger {
     final loss = Platform.isAndroid
         ? quality.fractionLost ?? 0
         : quality.lossRatio ?? 0;
-    final metrics = <String>['丢包 ${percentage(loss)}'];
+    final metrics = <String>[
+      '${XmaxLogger.localized('丢包', 'Packet Loss')} ${percentage(loss)}',
+    ];
     if (includesRtt) {
       metrics.add('RTT ${quality.rtt} ms');
     }
     metrics.add(
-      '带宽 ${(quality.totalBandwidth / 1000).toStringAsFixed(0)} kbps',
+      '${XmaxLogger.localized('带宽', 'Bandwidth')} ${(quality.totalBandwidth / 1000).toStringAsFixed(0)} kbps',
     );
-    return '指标：${metrics.join('，')}';
+    return '${XmaxLogger.localized('指标：', 'Metrics: ')}${metrics.join(XmaxLogger.localized('，', ', '))}';
   }
 
   static String networkQualityName(NetworkQuality quality) {
     final name = quality.name.toLowerCase();
-    if (name.contains('very_bad') || name.contains('verybad')) return '极差';
-    if (name.contains('excellent')) return '极好';
-    if (name.contains('good')) return '良好';
-    if (name.contains('poor')) return '较差';
-    if (name.contains('bad')) return '差';
-    if (name.contains('down')) return '断网';
-    return '未知';
+    if (name.contains('very_bad') || name.contains('verybad')) {
+      return XmaxLogger.localized('极差', 'Very Bad');
+    }
+    if (name.contains('excellent')) {
+      return XmaxLogger.localized('极好', 'Excellent');
+    }
+    if (name.contains('good')) return XmaxLogger.localized('良好', 'Good');
+    if (name.contains('poor')) return XmaxLogger.localized('较差', 'Poor');
+    if (name.contains('bad')) return XmaxLogger.localized('差', 'Bad');
+    if (name.contains('down')) {
+      return XmaxLogger.localized('断网', 'Disconnected');
+    }
+    return XmaxLogger.localized('未知', 'Unknown');
   }
 
   static String performanceAlarmName(PerformanceAlarmReason reason) {
     final name = reason.name.toLowerCase();
-    if (name.contains('bandwidth_fallback')) return '网络受限';
-    if (name.contains('bandwidth_resumed')) return '网络恢复';
-    if (name.contains('fallback')) return '设备性能受限';
-    if (name.contains('resumed')) return '设备性能恢复';
-    return '未知';
+    if (name.contains('bandwidth_fallback')) {
+      return XmaxLogger.localized('网络受限', 'Bandwidth Limited');
+    }
+    if (name.contains('bandwidth_resumed')) {
+      return XmaxLogger.localized('网络恢复', 'Bandwidth Recovered');
+    }
+    if (name.contains('fallback')) {
+      return XmaxLogger.localized('设备性能受限', 'Device Performance Limited');
+    }
+    if (name.contains('resumed')) {
+      return XmaxLogger.localized('设备性能恢复', 'Device Performance Recovered');
+    }
+    return XmaxLogger.localized('未知', 'Unknown');
   }
 
   static String percentage(num value) => '${(value * 100).toStringAsFixed(2)}%';
