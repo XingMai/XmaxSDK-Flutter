@@ -29,6 +29,178 @@ import 'package:xmax_sdk/src/service/realtime/RealtimeVideoTrack.dart';
 import 'package:xmax_sdk/src/stream/StreamControlling.dart';
 
 void main() {
+  test(
+    'media failure escalates an in-flight disconnect to full teardown',
+    () async {
+      final dependencies = _Dependencies();
+      final manager = dependencies.manager;
+      final local = await manager.createLocalCameraStream(
+        videoFormat: _Dependencies.format,
+      );
+      await manager.connect(localStream: local);
+      final gate = Completer<void>();
+      dependencies.stream.disconnectGate = gate;
+      final disconnect = manager.disconnect();
+      const error = XmaxError(
+        code: XmaxErrorCode.rtcError,
+        message: 'media failed',
+      );
+      final closed = Completer<void>();
+      await manager.setStateListener((state) {
+        if (state.connectionState == RealtimeConnectionState.idle &&
+            state.reason?.error == error &&
+            !closed.isCompleted) {
+          closed.complete();
+        }
+      });
+      dependencies.errors.forward(error, scope: RealtimeFailureScope.all);
+      await Future<void>.delayed(Duration.zero);
+      gate.complete();
+      await disconnect;
+      await closed.future;
+      expect(dependencies.media.stopCount, 1);
+      expect(dependencies.sessions.closedSessions, ['session-1']);
+    },
+  );
+
+  test(
+    'start failure releases session and publishes failure while keeping preview',
+    () async {
+      final dependencies = _Dependencies();
+      final manager = dependencies.manager;
+      final local = await manager.createLocalCameraStream(
+        videoFormat: _Dependencies.format,
+      );
+      await manager.connect(localStream: local);
+      const error = XmaxError(
+        code: XmaxErrorCode.timeout,
+        message: 'SEI timeout',
+      );
+      dependencies.stream.generationStartError = error;
+      dependencies.stream.stopGenerationError = StateError('stop failed');
+      dependencies.stream.disconnectError = StateError('leave failed');
+
+      await expectLater(
+        manager.startGeneration(context: RealtimeContext(prompt: 'animate')),
+        throwsA(same(error)),
+      );
+      final state = await manager.currentState;
+      expect(state.connectionState, RealtimeConnectionState.ready);
+      expect(state.reason?.error, same(error));
+      expect(dependencies.stream.disconnectCount, 1);
+      expect(dependencies.sessions.closedSessions, ['session-1']);
+      expect(dependencies.media.stopCount, 0);
+      expect(dependencies.media.currentTrack, isNotNull);
+      await manager.close();
+    },
+  );
+
+  test(
+    'invalid first context and running condition failure do not disconnect',
+    () async {
+      final dependencies = _Dependencies();
+      final manager = dependencies.manager;
+      final local = await manager.createLocalCameraStream(
+        videoFormat: _Dependencies.format,
+      );
+      await manager.connect(localStream: local);
+      await expectLater(manager.startGeneration(), throwsA(isA<XmaxError>()));
+      expect(
+        (await manager.currentState).connectionState,
+        RealtimeConnectionState.connected,
+      );
+      expect(dependencies.sessions.closedSessions, isEmpty);
+
+      await manager.startGeneration(
+        context: RealtimeContext(prompt: 'initial'),
+      );
+      dependencies.stream.updateError = StateError('change_condition failed');
+      await expectLater(
+        manager.startGeneration(
+          context: RealtimeContext(prompt: 'new condition'),
+        ),
+        throwsA(isA<XmaxError>()),
+      );
+      final state = await manager.currentState;
+      expect(state.connectionState, RealtimeConnectionState.generating);
+      expect(state.reason?.error, isNull);
+      expect(dependencies.stream.disconnectCount, 0);
+      await manager.close();
+    },
+  );
+
+  test(
+    'failed connection rollback deletes session even when RTC leave fails',
+    () async {
+      final dependencies = _Dependencies();
+      final manager = dependencies.manager;
+      final local = await manager.createLocalCameraStream(
+        videoFormat: _Dependencies.format,
+      );
+      const error = XmaxError(
+        code: XmaxErrorCode.rtcError,
+        message: 'join failed',
+      );
+      dependencies.stream.connectError = error;
+      dependencies.stream.disconnectError = StateError('leave failed');
+      await expectLater(
+        manager.connect(localStream: local),
+        throwsA(same(error)),
+      );
+      expect(dependencies.sessions.closedSessions, ['session-1']);
+      expect((await manager.currentState).reason?.error, same(error));
+      await manager.close();
+    },
+  );
+
+  test(
+    'old heartbeat and queued room failure cannot terminate a new session',
+    () async {
+      final dependencies = _Dependencies();
+      final manager = dependencies.manager;
+      final local = await manager.createLocalCameraStream(
+        videoFormat: _Dependencies.format,
+      );
+      await manager.connect(localStream: local);
+      final oldHeartbeat = dependencies.sessions._heartbeatFailureHandler!;
+      const error = XmaxError(
+        code: XmaxErrorCode.rtcError,
+        message: 'old room',
+      );
+      dependencies.errors.forward(error);
+      await manager.disconnect();
+      // The fake deliberately reuses the ID: identity alone is insufficient.
+      await manager.connect(localStream: local);
+      await oldHeartbeat('session-1', error);
+      expect(
+        (await manager.currentState).connectionState,
+        RealtimeConnectionState.connected,
+      );
+      expect(dependencies.sessions.closedSessions, ['session-1']);
+      await manager.close();
+    },
+  );
+
+  test(
+    'connection-only failure does not destroy an unconnected camera',
+    () async {
+      final dependencies = _Dependencies();
+      final manager = dependencies.manager;
+      await manager.createLocalCameraStream(videoFormat: _Dependencies.format);
+      dependencies.media.notifyPreviewReady();
+      dependencies.errors.forward(
+        const XmaxError(code: XmaxErrorCode.rtcError, message: 'room failure'),
+      );
+      await Future<void>.delayed(Duration.zero);
+      expect(
+        (await manager.currentState).connectionState,
+        RealtimeConnectionState.ready,
+      );
+      expect(dependencies.media.stopCount, 0);
+      await manager.close();
+    },
+  );
+
   for (final connected in <bool>[false, true]) {
     test(
       'runtime failure reaches state listener (connected=$connected)',
@@ -50,7 +222,12 @@ void main() {
             failed.complete(state);
           }
         });
-        dependencies.errors.forward(error);
+        dependencies.errors.forward(
+          error,
+          scope: connected
+              ? RealtimeFailureScope.connection
+              : RealtimeFailureScope.all,
+        );
         final state = await failed.future;
         expect(
           state.connectionState,
@@ -67,7 +244,9 @@ void main() {
 
   test('method errors do not invoke the internal runtime failure handler', () {
     final handler = RealtimeErrorHandler();
-    handler.setFailureHandler((_) => fail('Unexpected runtime failure'));
+    handler.setFailureHandler(
+      (_, _, _) async => fail('Unexpected runtime failure'),
+    );
     const error = XmaxError(
       code: XmaxErrorCode.rtcError,
       message: 'RTC failed',
@@ -735,6 +914,10 @@ final class _FakeStream implements StreamControlling {
   Completer<void>? updateGate;
   Object? generationStartError;
   Object? connectError;
+  Object? disconnectError;
+  Completer<void>? disconnectGate;
+  Object? stopGenerationError;
+  Object? updateError;
   @override
   bool get hasGenerationTask => generation;
   @override
@@ -798,7 +981,9 @@ final class _FakeStream implements StreamControlling {
   @override
   Future<void> disconnect() async {
     disconnectCount += 1;
+    await disconnectGate?.future;
     generation = false;
+    if (disconnectError case final error?) throw error;
   }
 
   @override
@@ -826,8 +1011,11 @@ final class _FakeStream implements StreamControlling {
   @override
   Future<void> setVideoEncoderConfig(RealtimeVideoFormat videoFormat) async {}
   @override
-  Future<void> stopGeneration({required String taskID}) async =>
-      generation = false;
+  Future<void> stopGeneration({required String taskID}) async {
+    generation = false;
+    if (stopGenerationError case final error?) throw error;
+  }
+
   @override
   Future<void> updateGeneration({
     required String taskID,
@@ -836,6 +1024,7 @@ final class _FakeStream implements StreamControlling {
     Size? targetSize,
   }) async {
     updatedPrompts.add(context.prompt);
+    if (updateError case final error?) throw error;
     final started = firstUpdateStarted;
     if (started != null && !started.isCompleted) {
       started.complete();
@@ -857,13 +1046,17 @@ final class _FakeRender implements RenderControlling {
 }
 
 final class _FakeSessions implements RealtimeSessionServicing {
+  final closedSessions = <String>[];
   RealtimeSessionHeartbeatFailureHandler? _heartbeatFailureHandler;
 
   Future<void> failHeartbeat(Object error) async =>
       _heartbeatFailureHandler?.call('session-1', error);
 
   @override
-  Future<void> closeSession({required String sessionID}) async {}
+  Future<void> closeSession({required String sessionID}) async {
+    closedSessions.add(sessionID);
+  }
+
   @override
   Future<RealtimeSession> createSession({required RealtimeModel model}) async =>
       const RealtimeSession(

@@ -443,6 +443,14 @@ final remoteStream = await manager.startGeneration(
 - 首次开始生成时 `context` 不得为空。
 - 生成中再次调用更新条件。
 
+失败清理（对齐 iOS）：
+
+- 首次启动生成的参数校验失败，只向调用方抛出错误，不销毁现有连接。
+- 开始远端任务后发生启动失败，释放 RTC 连接和云端 Session，保留本地预览，并通过 `RealtimeState.reason` 发布 `RealtimeReason.failure`。
+- 生成中的 `change_condition` 失败只向调用方抛出错误，不中断现有生成。
+- 后台故障区分连接与完整媒体生命周期，使用内部 revision 丢弃旧生命周期的迟到故障；接入方无需维护该机制。
+- RTC 退房失败不阻止云端 Session 删除，包括连接失败时的回滚。
+
 ### 10.7 首版排除成员
 
 以下 iOS 成员不进入 Flutter 摄像头版：
@@ -460,6 +468,7 @@ Flutter 契约：
 
 ```dart
 abstract interface class MediaServicing {
+  RealtimeModel get model;
   Size resolveModelInputSize(Size size);
 }
 ```
@@ -471,6 +480,8 @@ abstract interface class MediaServicing {
 ## 12. Storage
 
 Storage 不是 RTC 图片/视频输入管线，首版继续完整保留。
+
+启用业务日志时，上传日志通过 SDK 原生元数据读取显示图片像素尺寸、视频文件旋转后的显示尺寸，不解码完整画面。元数据不可用时显示 `--`，不阻断上传；与 iOS 一样，字节数据形式的视频不为日志创建临时文件，尺寸显示 `--`。
 
 ### 12.1 XmaxStorageProgress
 

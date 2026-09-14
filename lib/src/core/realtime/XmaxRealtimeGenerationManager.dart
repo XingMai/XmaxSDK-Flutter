@@ -37,16 +37,11 @@ final class XmaxRealtimeGenerationManager {
     required RealtimeContext? context,
     required void Function() ensureCurrent,
   }) async {
-    final resolvedContext = context ?? _currentContext;
-    if (resolvedContext == null) {
-      throw const XmaxError(
-        code: XmaxErrorCode.invalidConfiguration,
-        message: 'A realtime context is required for the first generation',
-      );
-    }
+    final resolvedContext = validateContext(context);
 
     final taskID = _taskIDGenerator();
     final startVersion = _startVersion;
+    GenerationStartConfirmation? ownedConfirmation;
 
     try {
       final confirmation = await _streamController.beginGeneration(
@@ -55,6 +50,7 @@ final class XmaxRealtimeGenerationManager {
         context: resolvedContext,
       );
 
+      ownedConfirmation = confirmation;
       _startConfirmation = confirmation;
       if (startVersion != _startVersion) {
         confirmation.cancel();
@@ -84,11 +80,28 @@ final class XmaxRealtimeGenerationManager {
       return taskID;
     } catch (error) {
       // The start signal may have reached the room before a later step failed.
-      await _streamController.stopGeneration(taskID: taskID);
+      try {
+        await _streamController.stopGeneration(taskID: taskID);
+      } catch (_) {
+        // Preserve the start failure; the coordinator still releases the room.
+      }
       throw XmaxError.from(error);
     } finally {
-      _startConfirmation = null;
+      if (identical(_startConfirmation, ownedConfirmation)) {
+        _startConfirmation = null;
+      }
     }
+  }
+
+  RealtimeContext validateContext(RealtimeContext? context) {
+    final resolvedContext = context ?? _currentContext;
+    if (resolvedContext == null) {
+      throw const XmaxError(
+        code: XmaxErrorCode.invalidConfiguration,
+        message: 'A realtime context is required for the first generation',
+      );
+    }
+    return resolvedContext;
   }
 
   Future<void> update({

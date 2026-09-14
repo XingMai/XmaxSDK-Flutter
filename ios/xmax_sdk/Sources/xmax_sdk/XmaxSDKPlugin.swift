@@ -10,6 +10,7 @@ public final class XmaxSDKPlugin: NSObject, FlutterPlugin {
     )
 
     public static func register(with registrar: FlutterPluginRegistrar) {
+        MediaFileMetadataManager.register(with: registrar)
         let channel = FlutterMethodChannel(
             name: "ai.xmax.sdk/logging",
             binaryMessenger: registrar.messenger()

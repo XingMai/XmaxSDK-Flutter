@@ -22,6 +22,56 @@ import 'package:xmax_sdk/src/stream/room/RoomControlling.dart';
 
 void main() {
   test(
+    'late video subscription failure cannot reject a new room with reused IDs',
+    () async {
+      final rtc = _FakeRtc();
+      final errors = <XmaxError>[];
+      final controller = StreamController(
+        rtcManager: rtc,
+        roomController: _FakeRoom(),
+        encodingController: _FakeEncoding(),
+        qualityController: _FakeQuality(),
+        errorListener: errors.add,
+      );
+      const connection = RealtimeSessionConnection(
+        roomID: 'room',
+        userID: 'local',
+        token: 'token',
+        botName: 'bot',
+      );
+      const remote = RemoteStream(
+        roomID: 'room',
+        userID: 'bot',
+        streamID: 'stream',
+      );
+      await controller.connect(connection: connection, ensureActive: () {});
+      final oldSubscription = Completer<void>();
+      rtc.videoSubscribeGate = oldSubscription;
+      rtc.listener!.onRemoteVideoPublished!(remote, true);
+      await controller.disconnect();
+      rtc.videoSubscribeGate = null;
+      await controller.connect(connection: connection, ensureActive: () {});
+      rtc.listener!.onRemoteVideoPublished!(remote, true);
+      final confirmation = await controller.beginGeneration(
+        taskID: 'new-task',
+        videoFormat: const RealtimeVideoFormat(
+          width: 832,
+          height: 1472,
+          fps: 30,
+        ),
+        context: RealtimeContext(prompt: 'animate'),
+      );
+      oldSubscription.completeError(StateError('old room subscription failed'));
+      await Future<void>.delayed(Duration.zero);
+      rtc.listener!.onSEIMessageReceived!(remote, utf8.encode('new-task'));
+      await confirmation.value;
+      expect(errors, isEmpty);
+      expect(controller.hasGenerationTask, isTrue);
+      await controller.disconnect();
+    },
+  );
+
+  test(
     'SEI replays an early first frame and retains it until unpublish',
     () async {
       final rtc = _FakeRtc();
@@ -605,6 +655,7 @@ final class _FakeRtc implements RtcManaging {
   final Object? roomMessageError;
   RtcEventListener? listener;
   Completer<void>? audioSubscribeGate;
+  Completer<void>? videoSubscribeGate;
   Object? audioVolumeError;
   final List<(String, bool)> audioSubscriptions = <(String, bool)>[];
   final List<(String, int)> audioVolumes = <(String, int)>[];
@@ -621,6 +672,7 @@ final class _FakeRtc implements RtcManaging {
     required String streamID,
     required bool subscribe,
   }) async {
+    if (subscribe) await videoSubscribeGate?.future;
     final error = subscribeRemoteVideoError;
     if (subscribe && error != null) {
       throw error;

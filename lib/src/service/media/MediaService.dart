@@ -9,6 +9,7 @@ import 'MediaServicing.dart';
 final class MediaService implements MediaServicing {
   MediaService({this.model = RealtimeModel.x2_0});
 
+  @override
   final RealtimeModel model;
 
   @override

@@ -6,20 +6,31 @@ import io.flutter.embedding.engine.plugins.FlutterPlugin;
 import io.flutter.plugin.common.MethodCall;
 import io.flutter.plugin.common.MethodChannel;
 
-/** Native logging only; RTC and storage remain managed by the Dart SDK. */
+/** Native diagnostics only; RTC and storage remain managed by the Dart SDK. */
 public final class XmaxSDKPlugin implements FlutterPlugin, MethodChannel.MethodCallHandler {
     private static final String TAG = "XmaxSDK";
     private static final int MAX_LINE_BYTES = 3000;
     private MethodChannel channel;
+    private MethodChannel mediaChannel;
+    private MediaFileMetadataManager metadataManager;
 
     @Override
     public void onAttachedToEngine(@NonNull FlutterPluginBinding binding) {
         channel = new MethodChannel(binding.getBinaryMessenger(), "ai.xmax.sdk/logging");
         channel.setMethodCallHandler(this);
+        metadataManager = new MediaFileMetadataManager();
+        mediaChannel = new MethodChannel(binding.getBinaryMessenger(), "ai.xmax.sdk/media");
+        mediaChannel.setMethodCallHandler(metadataManager);
     }
 
     @Override
     public void onDetachedFromEngine(@NonNull FlutterPluginBinding binding) {
+        if (mediaChannel != null) {
+            mediaChannel.setMethodCallHandler(null);
+            mediaChannel = null;
+            metadataManager.dispose();
+            metadataManager = null;
+        }
         if (channel != null) {
             channel.setMethodCallHandler(null);
             channel = null;

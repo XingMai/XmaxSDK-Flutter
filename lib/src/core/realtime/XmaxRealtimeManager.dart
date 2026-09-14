@@ -38,6 +38,8 @@ final class XmaxRealtimeManager implements XmaxRealtimeManaging {
     streamController = StreamController(
       rtcManager: rtcManager,
       errorListener: errorHandler.forward,
+      localMediaErrorListener: (error) =>
+          errorHandler.forward(error, scope: RealtimeFailureScope.all),
       remoteStreamListener: renderController.setRemoteStream,
       remoteFrameRenderedListener: renderController.markRemoteFrameRendered,
     );
@@ -89,9 +91,7 @@ final class XmaxRealtimeManager implements XmaxRealtimeManaging {
     _mediaController.setCameraPreviewReadyListener(
       _cameraPreviewDidBecomeReady,
     );
-    _errorHandler.setFailureHandler((error) {
-      unawaited(_handleStreamFailure(error));
-    });
+    _errorHandler.setFailureHandler(_handleStreamFailure);
   }
 
   @override
@@ -194,6 +194,7 @@ final class XmaxRealtimeManager implements XmaxRealtimeManaging {
       );
     }
 
+    _errorHandler.invalidatePendingFailures();
     final version = ++_operationVersion;
     _emit(
       const RealtimeState(connectionState: RealtimeConnectionState.preparing),
@@ -247,6 +248,7 @@ final class XmaxRealtimeManager implements XmaxRealtimeManaging {
     }
 
     try {
+      _errorHandler.invalidatePendingFailures();
       await _mediaController.stopLocalCameraStream();
       _emit(const RealtimeState(connectionState: RealtimeConnectionState.idle));
     } catch (error) {
@@ -328,6 +330,12 @@ final class XmaxRealtimeManager implements XmaxRealtimeManaging {
     }
 
     // A new operation version invalidates every callback from an older connect.
+    _errorHandler.invalidatePendingFailures(
+      scope: RealtimeFailureScope.connection,
+    );
+    final isConnectionCurrent = _errorHandler.captureValidity(
+      RealtimeFailureScope.connection,
+    );
     await _generationManager.reset();
     final version = ++_operationVersion;
 
@@ -342,7 +350,11 @@ final class XmaxRealtimeManager implements XmaxRealtimeManaging {
         model: options.model,
         videoFormat: videoFormat,
         isCurrent: () => version == _operationVersion,
-        onHeartbeatFailure: _handleHeartbeatFailure,
+        onHeartbeatFailure: (sessionID, error) async {
+          if (isConnectionCurrent()) {
+            await _handleHeartbeatFailure(sessionID, error);
+          }
+        },
       );
 
       _ensureCurrent(version);
@@ -408,6 +420,9 @@ final class XmaxRealtimeManager implements XmaxRealtimeManaging {
 
   Future<void> _performDisconnect({required RealtimeReason reason}) async {
     // Invalidate pending connect/generation callbacks before cleanup starts.
+    _errorHandler.invalidatePendingFailures(
+      scope: RealtimeFailureScope.connection,
+    );
     _operationVersion += 1;
     _generationRequestVersion += 1;
     _generationCancellationVersion += 1;
@@ -461,8 +476,9 @@ final class XmaxRealtimeManager implements XmaxRealtimeManaging {
   }
 
   Future<void> _performClose(RealtimeReason reason) async {
+    _errorHandler.invalidatePendingFailures();
     _operationVersion += 1;
-    await disconnect();
+    await disconnect(reason: reason);
 
     // Let an in-flight camera creation finish before MediaController tears
     // down its source; otherwise its operation guard would skip cleanup.
@@ -589,6 +605,14 @@ final class XmaxRealtimeManager implements XmaxRealtimeManaging {
       }
     }
 
+    // Argument errors do not own a termination scope, matching iOS. Only a
+    // failure after starting the remote task tears down its connection.
+    try {
+      _generationManager.validateContext(context);
+    } catch (error) {
+      throw _report(error);
+    }
+
     final version = _operationVersion;
     try {
       final taskID = await _generationManager.start(
@@ -617,10 +641,13 @@ final class XmaxRealtimeManager implements XmaxRealtimeManaging {
     } catch (error) {
       // Supersession is an internal control-flow event, matching a cancelled
       // Swift Task. It must not be reported as a new runtime failure.
-      if (requestVersion != _generationRequestVersion) {
+      if (requestVersion != _generationRequestVersion ||
+          version != _operationVersion) {
         throw XmaxError.from(error);
       }
-      throw _report(error);
+      final xmaxError = _report(error);
+      await disconnect(reason: RealtimeReason.failure(xmaxError));
+      throw xmaxError;
     }
   }
 
@@ -755,23 +782,29 @@ final class XmaxRealtimeManager implements XmaxRealtimeManaging {
     }
 
     final xmaxError = _report(error);
-    await _performDisconnect(reason: RealtimeReason.failure(xmaxError));
+    await disconnect(reason: RealtimeReason.failure(xmaxError));
   }
 
-  Future<void> _handleStreamFailure(XmaxError error) async {
+  Future<void> _handleStreamFailure(
+    XmaxError error,
+    RealtimeFailureScope scope,
+    bool Function() isCurrent,
+  ) async {
     // Method failures belong to their caller's Future. Only unsolicited RTC
     // failures enter this path and terminate the affected active lifecycle.
-    if (_closeFuture != null ||
-        _state.connectionState == RealtimeConnectionState.idle ||
-        _state.connectionState == RealtimeConnectionState.disconnecting) {
+    if (!isCurrent() ||
+        _closeFuture != null ||
+        _state.connectionState == RealtimeConnectionState.idle) {
       return;
     }
 
     final reason = RealtimeReason.failure(error);
-    if (_state.connectionState == RealtimeConnectionState.preparing ||
-        _state.connectionState == RealtimeConnectionState.ready) {
+    if (scope == RealtimeFailureScope.all) {
+      // A media failure can escalate an in-flight connection teardown: wait
+      // for that teardown, then release the source as well.
       await _closeWithReason(reason);
-    } else {
+    } else if (_state.connectionState !=
+        RealtimeConnectionState.disconnecting) {
       await disconnect(reason: reason);
     }
   }

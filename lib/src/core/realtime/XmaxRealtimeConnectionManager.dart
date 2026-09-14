@@ -120,7 +120,7 @@ final class XmaxRealtimeConnectionManager {
 
     _sessionService.stopHeartbeat();
     _resetRemoteRendering(track);
-    await _streamController.disconnect();
+    await _disconnectStreamSafely();
 
     if (session != null) {
       await _sessionService.closeSession(sessionID: session.id);
@@ -137,7 +137,20 @@ final class XmaxRealtimeConnectionManager {
 
     _sessionService.stopHeartbeat();
     _resetRemoteRendering(track);
-    await _streamController.disconnect();
+    await _disconnectStreamSafely();
+  }
+
+  Future<void> _disconnectStreamSafely() async {
+    try {
+      await _streamController.disconnect();
+    } catch (error) {
+      // RTC teardown failure must not skip cloud session deletion or mask the
+      // original connection error during rollback.
+      _logCleanupFailure(
+        '清理 RTC 连接失败 (Failed to Clean Up RTC Connection)',
+        error,
+      );
+    }
   }
 
   void _resetRemoteRendering(RealtimeVideoTrack? track) {

@@ -6,6 +6,8 @@ import '../../foundation/errors/ErrorMessageFormatter.dart';
 import '../../foundation/errors/ErrorNormalizer.dart';
 import '../../foundation/errors/XmaxError.dart';
 import '../../foundation/logging/XmaxLogger.dart';
+import '../../foundation/logging/XmaxLoggerOption.dart';
+import '../../foundation/media/MediaFileMetadataManager.dart';
 import '../../foundation/storage/StorageManaging.dart';
 import '../../foundation/storage/StorageModels.dart';
 import '../network/ApiServicing.dart';
@@ -163,12 +165,18 @@ final class StorageService implements StorageServicing {
         mediaType: mediaType,
       );
       final byteCount = _sourceByteCount(source);
+      final resolution = XmaxLogger.isEnabled(XmaxLoggerOption.business)
+          ? await const MediaFileMetadataManager().readResolution(
+              source,
+              isVideo: mediaType == _StorageMediaType.video,
+            )
+          : '--';
       XmaxLogger.info(
         category: XmaxLoggerCategory.storage,
         message:
             '开始上传 (Upload Started)\n'
             '├─ ${XmaxLogger.localized('类型：', 'Type: ')}${mediaType.value}\n'
-            '├─ ${XmaxLogger.localized('分辨率：', 'Resolution: ')}--\n'
+            '├─ ${XmaxLogger.localized('分辨率：', 'Resolution: ')}$resolution\n'
             '├─ ${XmaxLogger.localized('大小：', 'Size: ')}${_formatByteCount(byteCount)}\n'
             '└─ ${XmaxLogger.localized('安全检测：', 'Safety Check: ')}$checksSafety',
       );

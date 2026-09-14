@@ -1,7 +1,7 @@
-import 'dart:typed_data';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter/services.dart';
 import 'package:xmax_sdk/src/foundation/logging/XmaxLogger.dart';
 import 'package:xmax_sdk/src/foundation/storage/StorageManaging.dart';
 import 'package:xmax_sdk/src/foundation/storage/StorageModels.dart';
@@ -10,6 +10,11 @@ import 'package:xmax_sdk/src/service/storage/StorageService.dart';
 import 'package:xmax_sdk/xmax_sdk.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  const metadataChannel = MethodChannel('ai.xmax.sdk/media');
+  final messenger =
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+  tearDown(() => messenger.setMockMethodCallHandler(metadataChannel, null));
   late _FakeApiService apiService;
   late _FakeStorageManager storageManager;
   late StorageService service;
@@ -29,6 +34,10 @@ void main() {
     'global storage logs keep bilingual titles and English details',
     () async {
       final messages = <String>[];
+      messenger.setMockMethodCallHandler(
+        metadataChannel,
+        (_) async => {'width': 1920, 'height': 1080},
+      );
       XmaxLogger.configure(
         options: XmaxLoggerOption.all,
         environment: XmaxEnvironment.global,
@@ -42,6 +51,7 @@ void main() {
       );
       expect(messages.first, contains('开始上传 (Upload Started)'));
       expect(messages.first, contains('├─ Type: image'));
+      expect(messages.first, contains('├─ Resolution: 1920 × 1080'));
       expect(messages.first, contains('└─ Safety Check: false'));
       expect(messages.last, contains('├─ URL: https://bucket.example/'));
       expect(messages.last, contains('└─ Duration: '));

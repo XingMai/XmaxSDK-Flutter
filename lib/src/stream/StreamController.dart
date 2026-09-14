@@ -32,6 +32,7 @@ final class StreamController implements StreamControlling {
     EncodingControlling? encodingController,
     QualityControlling? qualityController,
     RealtimeErrorListener? errorListener,
+    RealtimeErrorListener? localMediaErrorListener,
     RemoteStreamListener? remoteStreamListener,
     RemoteFrameRenderedListener? remoteFrameRenderedListener,
     this.generationTimeout = const Duration(seconds: 15),
@@ -42,6 +43,7 @@ final class StreamController implements StreamControlling {
            encodingController ?? EncodingController(rtcManager: rtcManager),
        _qualityController = qualityController ?? QualityController(),
        _errorListener = errorListener,
+       _localMediaErrorListener = localMediaErrorListener,
        _remoteStreamListener = remoteStreamListener,
        _remoteFrameRenderedListener = remoteFrameRenderedListener {
     rtcManager.setEventListener(
@@ -62,11 +64,13 @@ final class StreamController implements StreamControlling {
   final EncodingControlling _encodingController;
   final QualityControlling _qualityController;
   final RealtimeErrorListener? _errorListener;
+  final RealtimeErrorListener? _localMediaErrorListener;
   final RemoteStreamListener? _remoteStreamListener;
   final RemoteFrameRenderedListener? _remoteFrameRenderedListener;
   final Duration generationTimeout;
 
   String _roomID = '';
+  int _connectionRevision = 0;
   String _botName = '';
   bool _localVideoPublished = false;
   final Set<String> _remoteVideoSubscriptions = <String>{};
@@ -193,6 +197,7 @@ final class StreamController implements StreamControlling {
     required void Function() ensureActive,
   }) async {
     // Existing remote streams may be reported while join() is still pending.
+    _connectionRevision += 1;
     _renderedRemoteStreams.clear();
     _roomID = connection.roomID.trim();
     _botName = connection.botName?.trim() ?? '';
@@ -216,6 +221,7 @@ final class StreamController implements StreamControlling {
 
   @override
   Future<void> disconnect() async {
+    _connectionRevision += 1;
     // Stop the generation handshake before changing RTC subscriptions.
     await _clearGeneration(notifyRemote: true);
 
@@ -443,9 +449,15 @@ final class StreamController implements StreamControlling {
   }
 
   Future<void> _activatePublishedAudio() async {
+    final revision = _audioSubscriptionVersion;
+    final connectionRevision = _connectionRevision;
     try {
       await activateRemoteAudio();
     } catch (error) {
+      if (revision != _audioSubscriptionVersion ||
+          connectionRevision != _connectionRevision) {
+        return;
+      }
       final xmaxError = XmaxError.from(error);
       if (xmaxError.code != XmaxErrorCode.cancelled) {
         _errorListener?.call(xmaxError);
@@ -454,12 +466,16 @@ final class StreamController implements StreamControlling {
   }
 
   Future<void> _subscribeRemoteVideo(RemoteStream stream) async {
+    final revision = _connectionRevision;
     try {
       await _rtcManager.subscribeRemoteVideo(
         streamID: stream.streamID,
         subscribe: true,
       );
     } catch (error) {
+      // A late subscription failure from the previous room must not remove a
+      // new subscription with the same ID or reject its generation handshake.
+      if (revision != _connectionRevision) return;
       _remoteVideoSubscriptions.remove(stream.streamID);
       final xmaxError = XmaxError.from(error);
       if (!_rejectGeneration(xmaxError)) {
@@ -532,7 +548,10 @@ final class StreamController implements StreamControlling {
   void _onError(Object error) {
     final xmaxError = XmaxError.from(error);
     if (!_rejectGeneration(xmaxError)) {
-      _errorListener?.call(xmaxError);
+      final listener = _roomID.isEmpty
+          ? (_localMediaErrorListener ?? _errorListener)
+          : _errorListener;
+      listener?.call(xmaxError);
     }
   }
 

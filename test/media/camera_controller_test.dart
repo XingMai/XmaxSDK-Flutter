@@ -237,11 +237,17 @@ final class _IdentityMediaService implements MediaServicing {
   const _IdentityMediaService();
 
   @override
+  RealtimeModel get model => RealtimeModel.x2_0;
+
+  @override
   Size resolveModelInputSize(Size size) => size;
 }
 
 final class _ResizingMediaService implements MediaServicing {
   const _ResizingMediaService();
+
+  @override
+  RealtimeModel get model => RealtimeModel.x2_0;
 
   @override
   Size resolveModelInputSize(Size size) => const Size(800, 1408);
