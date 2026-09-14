@@ -9,6 +9,7 @@ import '../../service/realtime/RealtimeVideoFormat.dart';
 import '../../service/realtime/RealtimeVideoTrack.dart';
 import '../../stream/StreamControlling.dart';
 import 'RealtimeModel.dart';
+import 'RealtimeTiming.dart';
 
 typedef RealtimeConnectionHeartbeatFailureHandler =
     Future<void> Function(String sessionID, Object error);
@@ -33,6 +34,17 @@ final class XmaxRealtimeConnectionManager {
 
   String get currentSessionID => _activeSession?.id ?? '';
 
+  Future<void> waitUntilRemoteFrameReady() =>
+      _renderController.waitUntilRemoteFrameReady();
+
+  Future<void> prepareForRemoteRemoval() async {
+    try {
+      await _renderController.prepareForRemoteRemoval();
+    } catch (error) {
+      _logCleanupFailure('隐藏远端视频失败 (Failed to Conceal Remote Video)', error);
+    }
+  }
+
   RealtimeMediaStream? get currentRemoteStream {
     final track = _activeRemoteTrack;
     if (_activeSession == null || track == null) {
@@ -46,13 +58,16 @@ final class XmaxRealtimeConnectionManager {
     required RealtimeVideoFormat videoFormat,
     required bool Function() isCurrent,
     required RealtimeConnectionHeartbeatFailureHandler onHeartbeatFailure,
+    RealtimeTiming? timing,
   }) async {
     RealtimeSession? session;
     var activated = false;
 
     try {
       // The cloud session must exist before RTC can join its assigned room.
+      timing?.beginSessionCreation();
       session = await _sessionService.createSession(model: model);
+      timing?.finishSessionCreation();
       _ensureCurrent(isCurrent);
 
       final connection = session.connection;
@@ -63,10 +78,12 @@ final class XmaxRealtimeConnectionManager {
         );
       }
 
+      timing?.beginRoomJoin();
       await _streamController.connect(
         connection: connection,
         ensureActive: () => _ensureCurrent(isCurrent),
       );
+      timing?.finishRoomJoin();
       _ensureCurrent(isCurrent);
 
       // Heartbeat starts only after RTC is connected successfully.
@@ -91,6 +108,7 @@ final class XmaxRealtimeConnectionManager {
       _ensureCurrent(isCurrent);
       return createRealtimeMediaStream(id: 'stream-remote', videoTrack: track);
     } catch (error) {
+      if (isCurrent()) timing?.finishFailure(error);
       // Roll back locally activated RTC/render state before closing the API session.
       if (isCurrent() || activated) {
         await _rollbackConnection();
@@ -119,6 +137,7 @@ final class XmaxRealtimeConnectionManager {
     _activeRemoteTrack = null;
 
     _sessionService.stopHeartbeat();
+    await prepareForRemoteRemoval();
     _resetRemoteRendering(track);
     await _disconnectStreamSafely();
 
@@ -136,6 +155,7 @@ final class XmaxRealtimeConnectionManager {
     _activeRemoteTrack = null;
 
     _sessionService.stopHeartbeat();
+    await prepareForRemoteRemoval();
     _resetRemoteRendering(track);
     await _disconnectStreamSafely();
   }

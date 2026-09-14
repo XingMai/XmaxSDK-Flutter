@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.0.2
+
+- 新增 X2.0-PRO 模型支持，X2.0 默认采集帧率调整为 30 fps，并完善分辨率、码率及编码偏好配置。
+- 新增服务环境配置、运行环境信息和 XLab 全页面国际化。
+- 完善实时状态、房间信令、音量契约、任务切换及异常后的资源清理。
+- 新增原生日志输出、日志国际化、媒体元数据和生成启动耗时统计。
+- 修复远端首帧显示延迟和停止生成时的黑帧；新增 `XmaxRealtimeVideoView.onRemoteVideoReady`，供接入方在远端画面开始显示时收起加载遮罩。
+- 优化 XLab 相册选择、加载状态和快速切换参考图的处理。
+
+### API Changes
+
+- 删除 `setErrorListener` 和 `setCameraPreviewReadyListener`；改用 `setStateListener` 的 `ready` 状态及 `state.reason?.error`，主动调用错误仍通过 Future 抛出。
+- 删除 `XmaxError.severity`；新增音量读取属性和 `disconnect(reason:)`。
+- 创建摄像头流后远端音量默认为 `0`；需要声音时，请在创建流后调用 `setRemoteAudioVolume`。
+
 ## 1.0.1
 
 - 修复使用新版腾讯 COS 依赖时 Android Release 构建的 R8 缺失类型错误。

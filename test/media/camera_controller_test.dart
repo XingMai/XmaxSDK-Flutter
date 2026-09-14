@@ -7,6 +7,7 @@ import 'package:xmax_sdk/src/foundation/rtc/RtcEventListener.dart';
 import 'package:xmax_sdk/src/foundation/rtc/RtcManaging.dart';
 import 'package:xmax_sdk/src/foundation/rtc/RtcModels.dart';
 import 'package:xmax_sdk/src/media/camera/CameraController.dart';
+import 'package:xmax_sdk/src/media/MediaController.dart';
 import 'package:xmax_sdk/src/render/video/VideoRenderBinding.dart';
 import 'package:xmax_sdk/src/render/video/VideoRenderRegistry.dart';
 import 'package:xmax_sdk/src/service/media/MediaServicing.dart';
@@ -15,6 +16,43 @@ import 'package:xmax_sdk/src/service/realtime/RealtimeVideoFormat.dart';
 import 'package:xmax_sdk/xmax_sdk.dart' show RealtimeModel;
 
 void main() {
+  test(
+    'capture stop failure still destroys engine and clears source ownership',
+    () async {
+      final rtc = _FakeRtc();
+      final camera = CameraController(
+        rtcManager: rtc,
+        permissionManager: const _AllowedPermissions(),
+        mediaService: const _IdentityMediaService(),
+      );
+      final media = MediaController(
+        rtcManager: rtc,
+        cameraController: camera,
+        interactionListener: (_, _) async {},
+      );
+      const format = RealtimeVideoFormat(width: 832, height: 1472, fps: 30);
+      final local = await media.createLocalCameraStream(
+        videoFormat: format,
+        position: CameraPosition.front,
+      );
+      rtc.stopError = StateError('capture stop failed');
+      rtc.destroyError = StateError('engine destroy failed');
+      await media.stopLocalStream();
+      expect(rtc.destroyCount, 1);
+      expect(media.currentTrack, isNull);
+      expect(media.owns(local), isFalse);
+      expect(VideoRenderRegistry.handleFor(local.videoTrack!), isNull);
+      rtc.stopError = null;
+      rtc.destroyError = null;
+      await media.createLocalCameraStream(
+        videoFormat: format,
+        position: CameraPosition.front,
+      );
+      await media.stopLocalStream();
+      expect(rtc.destroyCount, 2);
+    },
+  );
+
   test('preview listener survives an RTC destroy and camera restart', () async {
     final rtc = _FakeRtc();
     final camera = CameraController(
@@ -254,6 +292,9 @@ final class _ResizingMediaService implements MediaServicing {
 }
 
 final class _FakeRtc implements RtcManaging {
+  Object? stopError;
+  Object? destroyError;
+  int destroyCount = 0;
   void Function()? previewReadyListener;
   Object? switchError;
   Size? lastCaptureSize;
@@ -262,7 +303,11 @@ final class _FakeRtc implements RtcManaging {
   void notifyPreviewReady() => previewReadyListener?.call();
 
   @override
-  Future<void> destroy() async => previewReadyListener = null;
+  Future<void> destroy() async {
+    destroyCount++;
+    previewReadyListener = null;
+    if (destroyError case final error?) throw error;
+  }
 
   @override
   void setCameraPreviewReadyListener(void Function()? listener) {
@@ -309,7 +354,9 @@ final class _FakeRtc implements RtcManaging {
   }
 
   @override
-  Future<void> stopVideoCapture() async {}
+  Future<void> stopVideoCapture() async {
+    if (stopError case final error?) throw error;
+  }
 
   @override
   Future<void> subscribeRemoteAudio({

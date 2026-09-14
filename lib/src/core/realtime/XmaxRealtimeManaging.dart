@@ -102,6 +102,10 @@ abstract interface class XmaxRealtimeManaging {
   /// 已连接时可省略 [localStream]，此时返回 `null`。
   /// [context] 是本次生成条件；首次生成时必须提供，后续传入 `null`
   /// 时复用已缓存的生成条件。
+  ///
+  /// 启动时等待结果流确认及首帧解码就绪，再进入 `generating` 并完成 Future。
+  /// 无需提前挂载远端视图；等待期间仍可更新条件或停止生成。
+  /// 生成中的条件更新不重新等待首帧。
   Future<RealtimeMediaStream?> startGeneration({
     RealtimeMediaStream? localStream,
     RealtimeContext? context,

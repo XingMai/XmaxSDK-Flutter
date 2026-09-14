@@ -8,6 +8,7 @@ final class RtcEventListener {
   const RtcEventListener({
     this.onRemoteVideoPublished,
     this.onFirstRemoteVideoFrameRendered,
+    this.onFirstRemoteVideoFrameDecoded,
     this.onRemoteAudioPublished,
     this.onSEIMessageReceived,
     this.onError,
@@ -18,6 +19,7 @@ final class RtcEventListener {
   final void Function(RemoteStream stream, bool published)?
   onRemoteVideoPublished;
   final void Function(RemoteStream stream)? onFirstRemoteVideoFrameRendered;
+  final void Function(RemoteStream stream)? onFirstRemoteVideoFrameDecoded;
   final void Function(RemoteStream stream, bool published)?
   onRemoteAudioPublished;
   final void Function(RemoteStream stream, Uint8List message)?

@@ -558,7 +558,7 @@ final class _ModelOptionRow extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
                   Text(
-                    model.value.toUpperCase().replaceAll('-', ' '),
+                    model.value.toUpperCase(),
                     style: const TextStyle(
                       color: Color(0xFFF0F2F5),
                       fontSize: 14,

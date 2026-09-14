@@ -12,10 +12,19 @@ final class RtcEngineLease {
 }
 
 final class RtcEngineManager {
-  RtcEngineManager._();
+  RtcEngineManager._() : _createEngine = _createNativeEngine;
+
+  RtcEngineManager.internal({
+    required Future<RTCEngine> Function() createEngine,
+  }) : _createEngine = createEngine;
 
   static final shared = RtcEngineManager._();
   static const defaultAppID = '69a177e226e9b90176a86b96';
+
+  final Future<RTCEngine> Function() _createEngine;
+
+  static Future<RTCEngine> _createNativeEngine() =>
+      RTCEngine.createRTCEngine(RTCVideoContext(appId: defaultAppID));
 
   RtcEngineLease? _activeLease;
   final List<Completer<RtcEngineLease>> _requests =
@@ -36,16 +45,19 @@ final class RtcEngineManager {
     if (!identical(_activeLease?.id, lease.id)) {
       return;
     }
-    lease.engine.destroy();
-    _activeLease = null;
-    await _fulfillNext();
+    try {
+      lease.engine.destroy();
+    } finally {
+      // A failed native release must not retain ownership and block all future
+      // managers queued for the shared engine.
+      _activeLease = null;
+      await _fulfillNext();
+    }
   }
 
   Future<RtcEngineLease> _createLease() async {
     try {
-      final engine = await RTCEngine.createRTCEngine(
-        RTCVideoContext(appId: defaultAppID),
-      );
+      final engine = await _createEngine();
       return RtcEngineLease(engine);
     } catch (error) {
       throw XmaxError(

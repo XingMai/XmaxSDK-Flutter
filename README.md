@@ -191,7 +191,7 @@ Add XmaxSDK to your application's `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  xmax_sdk: ^1.0.1
+  xmax_sdk: ^1.0.2
 ```
 
 ### Git
@@ -203,7 +203,7 @@ dependencies:
   xmax_sdk:
     git:
       url: https://github.com/XingMai/XmaxSDK-Flutter.git
-      ref: 1.0.1
+      ref: 1.0.2
 ```
 
 ### Local path
@@ -463,6 +463,12 @@ persists the model selected on its home screen.
 The widget keeps the local camera preview underneath the generated video, enables
 touch interaction by default, and returns to the local preview after
 `stopGeneration()` or `disconnect()`.
+
+To display a loading overlay, keep it visible after `startGeneration()` returns
+and bind the returned remote track. Dismiss the overlay in the optional
+`onRemoteVideoReady` callback, which fires when the first remote frame has been
+rendered and the view starts showing it. Condition updates do not repeat this
+notification; a new remote binding cycle does.
 
 Camera generation audio is muted by default. To hear it, call
 `await _realtime.setRemoteAudioVolume(0.8)` after creating the local stream;

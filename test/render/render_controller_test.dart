@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:xmax_sdk/src/foundation/errors/XmaxError.dart';
 import 'package:xmax_sdk/src/foundation/rtc/RtcModels.dart';
 import 'package:xmax_sdk/src/render/RenderController.dart';
 import 'package:xmax_sdk/src/render/video/VideoRenderBinding.dart';
@@ -10,6 +11,81 @@ void main() {
     roomID: 'room-id',
     userID: 'bot-id',
     streamID: 'bot-stream',
+  );
+
+  test('headless remote cleanup does not require a Flutter frame', () async {
+    final controller = RenderController();
+    final track = createRealtimeVideoTrack(id: 'remote');
+    controller.registerRemoteTrack(track, interactionListener: (_) {});
+    controller.setRemoteStream(stream);
+    await controller.prepareForRemoteRemoval();
+    controller.resetRemoteTrack(track);
+  });
+
+  test(
+    'decoded readiness does not depend on a mounted or rendered view',
+    () async {
+      final controller = RenderController();
+      final track = createRealtimeVideoTrack(id: 'remote');
+      controller.registerRemoteTrack(track, interactionListener: (_) {});
+      controller.setRemoteStream(stream);
+      var completed = false;
+      final wait = controller.waitUntilRemoteFrameReady().then(
+        (_) => completed = true,
+      );
+      controller.markRemoteFrameReady(
+        const RemoteStream(
+          roomID: 'old',
+          userID: 'bot-id',
+          streamID: 'bot-stream',
+        ),
+      );
+      await Future<void>.delayed(Duration.zero);
+      expect(completed, isFalse);
+      controller.markRemoteFrameReady(stream);
+      await wait;
+      final binding =
+          VideoRenderRegistry.handleFor(track)!.value
+              as RemoteVideoRenderBinding;
+      expect(binding.firstFrameRendered, isFalse);
+      await controller.waitUntilRemoteFrameReady();
+      controller.resetRemoteTrack(track);
+    },
+  );
+
+  test('clearing a stream cancels pending readiness waits', () async {
+    final controller = RenderController();
+    final track = createRealtimeVideoTrack(id: 'remote');
+    controller.registerRemoteTrack(track, interactionListener: (_) {});
+    controller.setRemoteStream(stream);
+    final cancelled = expectLater(
+      controller.waitUntilRemoteFrameReady(),
+      throwsA(
+        isA<XmaxError>().having((e) => e.code, 'code', XmaxErrorCode.cancelled),
+      ),
+    );
+    controller.setRemoteStream(null);
+    await cancelled;
+    controller.resetRemoteTrack(track);
+  });
+
+  test(
+    'missing first frame times out without changing the visual binding',
+    () async {
+      final controller = RenderController(
+        remoteFrameReadyTimeout: Duration.zero,
+      );
+      final track = createRealtimeVideoTrack(id: 'remote');
+      controller.registerRemoteTrack(track, interactionListener: (_) {});
+      controller.setRemoteStream(stream);
+      await expectLater(
+        controller.waitUntilRemoteFrameReady(),
+        throwsA(
+          isA<XmaxError>().having((e) => e.code, 'code', XmaxErrorCode.timeout),
+        ),
+      );
+      controller.resetRemoteTrack(track);
+    },
   );
 
   test('a selected remote stream is bound immediately', () {

@@ -52,7 +52,7 @@ Flutter：
 
 ```dart
 abstract final class XmaxSDKInfo {
-  static const String version = '1.0.0';
+  static const String version = '1.0.2';
 }
 ```
 
@@ -442,6 +442,9 @@ final remoteStream = await manager.startGeneration(
 - 传入 `localStream` 时返回非空远端流。
 - 首次开始生成时 `context` 不得为空。
 - 生成中再次调用更新条件。
+- 启动时在 SEI 匹配与远端首帧解码均确认后完成 Future、开启远端音频并进入 `generating`；首帧等待上限为 10 秒，不依赖远端视图挂载。
+- 首帧等待不占用条件更新队列，期间仍可更新条件或停止生成；统一视频视图保留独立的首帧渲染保护。
+- `XmaxRealtimeVideoView.onRemoteVideoReady` 在远端首帧已渲染、视图开始显示画面时于帧末通知。XLab 用它收起加载遮罩，不在 `startGeneration()` 返回时提前收起；每个绑定周期只通知一次，停止或替换轨道会丢弃待送达的旧通知。
 
 失败清理（对齐 iOS）：
 
@@ -450,6 +453,10 @@ final remoteStream = await manager.startGeneration(
 - 生成中的 `change_condition` 失败只向调用方抛出错误，不中断现有生成。
 - 后台故障区分连接与完整媒体生命周期，使用内部 revision 丢弃旧生命周期的迟到故障；接入方无需维护该机制。
 - RTC 退房失败不阻止云端 Session 删除，包括连接失败时的回滚。
+- 云端 Session 删除失败时，最终状态仍保留原 Session ID，便于关联排查。
+- 完整关闭等待进行中的本地媒体操作，分别尝试停止采集、销毁房间和释放引擎；前一步报错不跳过后续清理。
+
+启用 `XmaxLoggerOption.performance` 后，首次启动输出独立的单调时钟耗时统计：会话创建、房间连接、结果流确认与首帧就绪。启动失败输出停留阶段及耗时；主动取消不输出失败耗时，生成中的条件更新不重复统计启动。
 
 ### 10.7 首版排除成员
 

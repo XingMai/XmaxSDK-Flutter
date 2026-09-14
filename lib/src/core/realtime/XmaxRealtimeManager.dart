@@ -21,6 +21,7 @@ import '../../stream/StreamController.dart';
 import '../../stream/StreamControlling.dart';
 import 'RealtimeConfiguration.dart';
 import 'RealtimeErrorHandler.dart';
+import 'RealtimeTiming.dart';
 import 'XmaxRealtimeConnectionManager.dart';
 import 'XmaxRealtimeGenerationManager.dart';
 import 'XmaxRealtimeManaging.dart';
@@ -42,6 +43,7 @@ final class XmaxRealtimeManager implements XmaxRealtimeManaging {
           errorHandler.forward(error, scope: RealtimeFailureScope.all),
       remoteStreamListener: renderController.setRemoteStream,
       remoteFrameRenderedListener: renderController.markRemoteFrameRendered,
+      remoteFrameReadyListener: renderController.markRemoteFrameReady,
     );
 
     final mediaController = MediaController(
@@ -306,6 +308,11 @@ final class XmaxRealtimeManager implements XmaxRealtimeManaging {
   @override
   Future<RealtimeMediaStream> connect({
     required RealtimeMediaStream localStream,
+  }) => _connect(localStream: localStream);
+
+  Future<RealtimeMediaStream> _connect({
+    required RealtimeMediaStream localStream,
+    RealtimeTiming? timing,
   }) async {
     if (_connectionManager.currentSessionID.isNotEmpty ||
         _state.connectionState == RealtimeConnectionState.connecting ||
@@ -344,9 +351,11 @@ final class XmaxRealtimeManager implements XmaxRealtimeManaging {
     );
 
     try {
+      timing?.beginConnection();
       await _streamController.setVideoEncoderConfig(videoFormat);
 
       final remoteStream = await _connectionManager.connect(
+        timing: timing,
         model: options.model,
         videoFormat: videoFormat,
         isCurrent: () => version == _operationVersion,
@@ -373,6 +382,7 @@ final class XmaxRealtimeManager implements XmaxRealtimeManaging {
         ),
       );
 
+      timing?.finishConnection();
       return remoteStream;
     } catch (error) {
       // A newer disconnect/close owns the state when the version has changed.
@@ -438,14 +448,21 @@ final class XmaxRealtimeManager implements XmaxRealtimeManaging {
 
     // Cleanup is best-effort: one failing layer must not retain the others.
     try {
+      await _connectionManager.prepareForRemoteRemoval();
+    } catch (error) {
+      _report(error);
+    }
+
+    try {
       await _generationManager.reset(taskID: taskID);
     } catch (error) {
       _report(error);
     }
 
-    String? sessionID;
+    final activeSessionID = _connectionManager.currentSessionID;
+    String? sessionID = activeSessionID.isEmpty ? null : activeSessionID;
     try {
-      sessionID = await _connectionManager.disconnect();
+      sessionID = await _connectionManager.disconnect() ?? sessionID;
     } catch (error) {
       _report(error);
     }
@@ -506,29 +523,41 @@ final class XmaxRealtimeManager implements XmaxRealtimeManaging {
     RealtimeMediaStream? localStream,
     RealtimeContext? context,
   }) async {
-    // Match iOS Task cancellation: a newer request supersedes an older request
+    final timing =
+        _state.connectionState != RealtimeConnectionState.generating &&
+            _startingGenerationTaskID == null
+        ? RealtimeTiming()
+        : null;
+    // A newer request supersedes an older request
     // that is still connecting or waiting for its generation SEI.
     final requestVersion = ++_generationRequestVersion;
     _generationManager.cancelPendingStart();
 
-    final prepared = await _enqueueGenerationOperation(
-      () => _prepareGeneration(
-        localStream: localStream,
-        context: context,
-        requestVersion: requestVersion,
-      ),
-    );
+    try {
+      final prepared = await _enqueueGenerationOperation(
+        () => _prepareGeneration(
+          localStream: localStream,
+          context: context,
+          requestVersion: requestVersion,
+          timing: timing,
+        ),
+      );
 
-    // Waiting for the SEI confirmation must not block later condition changes.
-    // Only the short task mutation above is serialized.
-    await prepared.readiness;
-    return prepared.remoteStream;
+      // First-frame waiting is outside the mutation queue so condition changes
+      // and stop requests remain responsive while the decoder starts.
+      await prepared.readiness;
+      return prepared.remoteStream;
+    } catch (error) {
+      timing?.finishFailure(error);
+      rethrow;
+    }
   }
 
   Future<_PreparedGeneration> _prepareGeneration({
     required RealtimeMediaStream? localStream,
     required RealtimeContext? context,
     required int requestVersion,
+    RealtimeTiming? timing,
   }) async {
     // A selection made during teardown should start after that teardown rather
     // than failing because the previous RTC session is still disconnecting.
@@ -551,7 +580,7 @@ final class XmaxRealtimeManager implements XmaxRealtimeManaging {
           _state.connectionState == RealtimeConnectionState.generating) {
         remoteStream = _connectionManager.currentRemoteStream;
       } else {
-        remoteStream = await connect(localStream: localStream);
+        remoteStream = await _connect(localStream: localStream, timing: timing);
         _ensureGenerationRequestCurrent(requestVersion);
       }
     }
@@ -559,6 +588,7 @@ final class XmaxRealtimeManager implements XmaxRealtimeManaging {
     final task = await _prepareGenerationTask(
       context,
       requestVersion: requestVersion,
+      timing: timing,
     );
     return _PreparedGeneration(
       remoteStream: remoteStream,
@@ -569,6 +599,7 @@ final class XmaxRealtimeManager implements XmaxRealtimeManaging {
   Future<_PreparedGenerationTask> _prepareGenerationTask(
     RealtimeContext? context, {
     required int requestVersion,
+    RealtimeTiming? timing,
   }) async {
     final sessionID = _connectionManager.currentSessionID;
     final videoFormat = _mediaController.currentVideoFormat;
@@ -605,7 +636,7 @@ final class XmaxRealtimeManager implements XmaxRealtimeManaging {
       }
     }
 
-    // Argument errors do not own a termination scope, matching iOS. Only a
+    // Argument errors do not own a termination scope. Only a
     // failure after starting the remote task tears down its connection.
     try {
       _generationManager.validateContext(context);
@@ -616,6 +647,7 @@ final class XmaxRealtimeManager implements XmaxRealtimeManaging {
     final version = _operationVersion;
     try {
       final taskID = await _generationManager.start(
+        timing: timing,
         videoFormat: videoFormat,
         context: context,
         ensureCurrent: () => _ensureCurrent(version),
@@ -634,18 +666,19 @@ final class XmaxRealtimeManager implements XmaxRealtimeManaging {
           taskID: taskID,
           operationVersion: version,
           completer: completer,
+          timing: timing,
         ),
       );
 
       return _PreparedGenerationTask(readiness: completer.future);
     } catch (error) {
-      // Supersession is an internal control-flow event, matching a cancelled
-      // Swift Task. It must not be reported as a new runtime failure.
+      // Supersession is an internal control-flow event, not a runtime failure.
       if (requestVersion != _generationRequestVersion ||
           version != _operationVersion) {
         throw XmaxError.from(error);
       }
       final xmaxError = _report(error);
+      timing?.finishFailure(xmaxError);
       await disconnect(reason: RealtimeReason.failure(xmaxError));
       throw xmaxError;
     }
@@ -656,8 +689,12 @@ final class XmaxRealtimeManager implements XmaxRealtimeManaging {
     required String taskID,
     required int operationVersion,
     required Completer<void> completer,
+    RealtimeTiming? timing,
   }) async {
     try {
+      await _connectionManager.waitUntilRemoteFrameReady();
+      _ensureCurrent(operationVersion);
+      await _streamController.activateRemoteAudio();
       _ensureCurrent(operationVersion);
       if (_connectionManager.currentSessionID != sessionID) {
         throw const XmaxError(
@@ -675,19 +712,20 @@ final class XmaxRealtimeManager implements XmaxRealtimeManaging {
       );
 
       if (!completer.isCompleted) {
+        timing?.finish();
         completer.complete();
       }
     } catch (error) {
-      // If stop/disconnect already completed the waiter, that path also owns
-      // task cleanup. Otherwise a render failure must stop the created task.
-      if (!completer.isCompleted) {
-        try {
-          await _generationManager.stop(taskID: taskID);
-        } catch (stopError) {
-          _report(stopError);
+      if (!completer.isCompleted && operationVersion == _operationVersion) {
+        final xmaxError = _report(error);
+        timing?.finishFailure(xmaxError);
+        // Detach the failed waiter so disconnect cannot replace its error with
+        // a cancellation. The public Future completes after session cleanup.
+        if (identical(_startingGenerationCompleter, completer)) {
+          _startingGenerationCompleter = null;
         }
-
-        completer.completeError(_report(error));
+        await disconnect(reason: RealtimeReason.failure(xmaxError));
+        completer.completeError(xmaxError);
       }
     } finally {
       if (identical(_startingGenerationCompleter, completer)) {
@@ -724,6 +762,7 @@ final class XmaxRealtimeManager implements XmaxRealtimeManaging {
     _cancelStartingGeneration();
 
     try {
+      await _connectionManager.prepareForRemoteRemoval();
       await _generationManager.stop(taskID: taskID);
     } catch (error) {
       _report(error);

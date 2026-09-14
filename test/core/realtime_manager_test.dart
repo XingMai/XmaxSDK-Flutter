@@ -29,6 +29,162 @@ import 'package:xmax_sdk/src/service/realtime/RealtimeVideoTrack.dart';
 import 'package:xmax_sdk/src/stream/StreamControlling.dart';
 
 void main() {
+  for (final disconnect in [false, true]) {
+    test(
+      'conceals remote surface before stopping native generation (disconnect=$disconnect)',
+      () async {
+        final deps = _Dependencies();
+        final local = await deps.manager.createLocalCameraStream(
+          videoFormat: _Dependencies.format,
+        );
+        await deps.manager.startGeneration(
+          localStream: local,
+          context: RealtimeContext(prompt: 'test'),
+        );
+        final stopCount = deps.stream.stopCount;
+        deps.render.removalGate = Completer<void>();
+        final stopping = disconnect
+            ? deps.manager.disconnect()
+            : deps.manager.stopGeneration();
+        await deps.render.removalStarted.future;
+        expect(deps.stream.stopCount, stopCount);
+        expect(deps.stream.disconnectCount, 0);
+        expect(deps.stream.generation, isTrue);
+        deps.render.removalGate!.complete();
+        await stopping;
+        expect(deps.stream.stopCount, greaterThan(stopCount));
+        expect(deps.stream.generation, isFalse);
+        await deps.manager.close();
+      },
+    );
+  }
+
+  test(
+    'startup waits for decoded frame while condition changes stay responsive',
+    () async {
+      final deps = _Dependencies();
+      deps.render.readyGate = Completer<void>();
+      final local = await deps.manager.createLocalCameraStream(
+        videoFormat: _Dependencies.format,
+      );
+      var completed = false;
+      final start = deps.manager
+          .startGeneration(
+            localStream: local,
+            context: RealtimeContext(prompt: 'first'),
+          )
+          .then((stream) {
+            completed = true;
+            return stream;
+          });
+      await deps.render.waiting.future;
+      expect(
+        (await deps.manager.currentState).connectionState,
+        RealtimeConnectionState.connected,
+      );
+      expect(completed, isFalse);
+      expect(deps.stream.audioActivations, 0);
+
+      deps.stream.firstUpdateStarted = Completer<void>();
+      final update = deps.manager.startGeneration(
+        context: RealtimeContext(prompt: 'second'),
+      );
+      await deps.stream.firstUpdateStarted!.future;
+      expect(deps.stream.updatedPrompts, ['second']);
+      expect(deps.stream.startedPrompts, ['first']);
+      deps.render.readyGate!.complete();
+      expect(await start, isNotNull);
+      await update;
+      expect(
+        (await deps.manager.currentState).connectionState,
+        RealtimeConnectionState.generating,
+      );
+      expect(deps.stream.audioActivations, 1);
+      await deps.manager.close();
+    },
+  );
+
+  test(
+    'first-frame timeout preserves failure and cleans up before returning',
+    () async {
+      final deps = _Dependencies();
+      const error = XmaxError(
+        code: XmaxErrorCode.timeout,
+        message: 'Remote video first frame timed out',
+      );
+      deps.render.readyError = error;
+      final local = await deps.manager.createLocalCameraStream(
+        videoFormat: _Dependencies.format,
+      );
+      await expectLater(
+        deps.manager.startGeneration(
+          localStream: local,
+          context: RealtimeContext(prompt: 'first'),
+        ),
+        throwsA(same(error)),
+      );
+      expect((await deps.manager.currentState).reason?.error, same(error));
+      expect(deps.sessions.closedSessions, ['session-1']);
+      expect(deps.stream.audioActivations, 0);
+      expect(deps.media.currentTrack, isNotNull);
+      await deps.manager.close();
+    },
+  );
+
+  test(
+    'stop cancels first-frame waiter and late readiness cannot restart audio',
+    () async {
+      final deps = _Dependencies();
+      deps.render.readyGate = Completer<void>();
+      final local = await deps.manager.createLocalCameraStream(
+        videoFormat: _Dependencies.format,
+      );
+      final start = deps.manager.startGeneration(
+        localStream: local,
+        context: RealtimeContext(prompt: 'first'),
+      );
+      final cancelled = expectLater(
+        start,
+        throwsA(
+          isA<XmaxError>().having(
+            (e) => e.code,
+            'code',
+            XmaxErrorCode.cancelled,
+          ),
+        ),
+      );
+      await deps.render.waiting.future;
+      await deps.manager.stopGeneration();
+      await cancelled;
+      deps.render.readyGate!.complete();
+      await Future<void>.delayed(Duration.zero);
+      expect(deps.stream.audioActivations, 0);
+      expect(
+        (await deps.manager.currentState).connectionState,
+        RealtimeConnectionState.connected,
+      );
+      await deps.manager.close();
+    },
+  );
+
+  test(
+    'session deletion failure retains its ID in the terminal state',
+    () async {
+      final deps = _Dependencies();
+      final local = await deps.manager.createLocalCameraStream(
+        videoFormat: _Dependencies.format,
+      );
+      await deps.manager.connect(localStream: local);
+      deps.sessions.closeError = StateError('delete failed');
+      await deps.manager.disconnect();
+      final state = await deps.manager.currentState;
+      expect(state.connectionState, RealtimeConnectionState.ready);
+      expect(state.sessionID, 'session-1');
+      expect(deps.sessions.closedSessions, ['session-1']);
+      await deps.manager.close();
+    },
+  );
+
   test(
     'media failure escalates an in-flight disconnect to full teardown',
     () async {
@@ -900,6 +1056,8 @@ final class _FakeMedia implements MediaControlling {
 }
 
 final class _FakeStream implements StreamControlling {
+  int stopCount = 0;
+  int audioActivations = 0;
   @override
   double remoteAudioVolume = 1;
   bool generation = false;
@@ -921,7 +1079,10 @@ final class _FakeStream implements StreamControlling {
   @override
   bool get hasGenerationTask => generation;
   @override
-  Future<void> activateRemoteAudio() async {}
+  Future<void> activateRemoteAudio() async {
+    audioActivations++;
+  }
+
   @override
   Future<GenerationStartConfirmation> beginGeneration({
     required String taskID,
@@ -1012,6 +1173,7 @@ final class _FakeStream implements StreamControlling {
   Future<void> setVideoEncoderConfig(RealtimeVideoFormat videoFormat) async {}
   @override
   Future<void> stopGeneration({required String taskID}) async {
+    stopCount++;
     generation = false;
     if (stopGenerationError case final error?) throw error;
   }
@@ -1034,6 +1196,24 @@ final class _FakeStream implements StreamControlling {
 }
 
 final class _FakeRender implements RenderControlling {
+  Completer<void>? removalGate;
+  final removalStarted = Completer<void>();
+  @override
+  Future<void> prepareForRemoteRemoval() async {
+    if (!removalStarted.isCompleted) removalStarted.complete();
+    await removalGate?.future;
+  }
+
+  Completer<void>? readyGate;
+  Object? readyError;
+  final waiting = Completer<void>();
+  @override
+  Future<void> waitUntilRemoteFrameReady() async {
+    if (!waiting.isCompleted) waiting.complete();
+    await readyGate?.future;
+    if (readyError case final error?) throw error;
+  }
+
   @override
   void registerRemoteTrack(
     RealtimeVideoTrack track, {
@@ -1046,6 +1226,7 @@ final class _FakeRender implements RenderControlling {
 }
 
 final class _FakeSessions implements RealtimeSessionServicing {
+  Object? closeError;
   final closedSessions = <String>[];
   RealtimeSessionHeartbeatFailureHandler? _heartbeatFailureHandler;
 
@@ -1055,6 +1236,7 @@ final class _FakeSessions implements RealtimeSessionServicing {
   @override
   Future<void> closeSession({required String sessionID}) async {
     closedSessions.add(sessionID);
+    if (closeError case final error?) throw error;
   }
 
   @override

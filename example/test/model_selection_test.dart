@@ -43,8 +43,8 @@ void main() {
     await tester.pumpWidget(const XLabApp());
     await tester.pumpAndSettle();
     expect(find.text('MODELS: 2'), findsOneWidget);
-    expect(find.text('X2.0 PRO'), findsOneWidget);
-    expect(find.text('X2.0-PRO'), findsOneWidget);
+    expect(find.text('X2.0 PRO'), findsNothing);
+    expect(find.text('X2.0-PRO'), findsNWidgets(2));
 
     final proRow = find.byKey(const ValueKey<String>('model-x2.0-pro'));
     await tester.tap(proRow);

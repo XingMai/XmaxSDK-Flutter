@@ -147,6 +147,6 @@ void main() {
       'sdk_version',
       'device_model',
     });
-    expect(RuntimeInfo.current.toJson()['sdk_version'], '1.0.1');
+    expect(RuntimeInfo.current.toJson()['sdk_version'], '1.0.2');
   });
 }

@@ -63,7 +63,7 @@ class _RealtimePageState extends State<RealtimePage>
   bool _cameraReady = false;
   bool _busy = false;
   bool _isSwitchingCamera = false;
-  bool _isCameraSwitchWaitingForGeneration = false;
+  bool _isWaitingForRemoteVideo = false;
   bool _isLoading = true;
   bool _isSuspendedForBackground = false;
   bool _isResumingFromBackground = false;
@@ -160,12 +160,7 @@ class _RealtimePageState extends State<RealtimePage>
         } else if (state.connectionState == RealtimeConnectionState.ready) {
           _cameraReady = true;
           _isLoading = false;
-        }
-        if (_isCameraSwitchWaitingForGeneration &&
-            state.connectionState == RealtimeConnectionState.generating) {
-          _isCameraSwitchWaitingForGeneration = false;
-          _isSwitchingCamera = false;
-          _isLoading = false;
+          _isWaitingForRemoteVideo = false;
         }
         if (state.connectionState == RealtimeConnectionState.connected &&
             state.taskID == null) {
@@ -175,7 +170,7 @@ class _RealtimePageState extends State<RealtimePage>
         if (error != null) {
           _lastError = error;
           _isLoading = false;
-          _isCameraSwitchWaitingForGeneration = false;
+          _isWaitingForRemoteVideo = false;
           _isSwitchingCamera = false;
         }
       });
@@ -227,33 +222,51 @@ class _RealtimePageState extends State<RealtimePage>
       _busy = true;
       // A change_condition keeps rendering the current remote stream. Loading
       // is reserved for the initial connection/generation transition.
-      _isLoading = !isConditionUpdate;
+      if (!isConditionUpdate) {
+        _isWaitingForRemoteVideo = true;
+        _isLoading = true;
+      }
       _lastError = null;
     });
     try {
-      final hasOpenConnection =
-          connectionState == RealtimeConnectionState.connected ||
-          connectionState == RealtimeConnectionState.generating;
+      // Always request the current remote track, including when a newer
+      // selection supersedes the operation that originally connected it.
       final remote = await _manager.startGeneration(
-        localStream: hasOpenConnection ? null : localStream,
+        localStream: localStream,
         context: context,
       );
 
       if (!_isCurrentRealtimeOperation(operation)) return;
       setState(() {
         if (remote != null) _remoteStream = remote;
-        _isLoading = false;
       });
     } catch (error) {
       if (_isCurrentRealtimeOperation(operation)) {
         _showError(error);
-        setState(() => _isLoading = false);
+        setState(() {
+          if (_state.connectionState != RealtimeConnectionState.generating) {
+            _isWaitingForRemoteVideo = false;
+            _isLoading = false;
+          }
+        });
       }
     } finally {
       if (_isCurrentRealtimeOperation(operation)) {
         setState(() => _busy = false);
       }
     }
+  }
+
+  void _remoteVideoDidBecomeReady() {
+    if (!mounted || _isSuspendedForBackground || !_isWaitingForRemoteVideo) {
+      return;
+    }
+
+    setState(() {
+      _isWaitingForRemoteVideo = false;
+      _isLoading = false;
+      _isSwitchingCamera = false;
+    });
   }
 
   Future<void> _stopGeneration() async {
@@ -270,6 +283,7 @@ class _RealtimePageState extends State<RealtimePage>
     final operation = ++_realtimeOperationVersion;
     setState(() {
       _busy = true;
+      _isWaitingForRemoteVideo = false;
       _isLoading = !_cameraReady;
     });
     try {
@@ -471,8 +485,8 @@ class _RealtimePageState extends State<RealtimePage>
     setState(() {
       _busy = true;
       _isSwitchingCamera = true;
-      _isCameraSwitchWaitingForGeneration = wasGenerating;
       if (wasGenerating) {
+        _isWaitingForRemoteVideo = true;
         _isLoading = true;
       }
     });
@@ -485,7 +499,7 @@ class _RealtimePageState extends State<RealtimePage>
       if (_isCurrentRealtimeOperation(operation)) {
         _showError(error);
         setState(() {
-          _isCameraSwitchWaitingForGeneration = false;
+          _isWaitingForRemoteVideo = false;
           _isLoading = !_cameraReady;
         });
       }
@@ -542,7 +556,7 @@ class _RealtimePageState extends State<RealtimePage>
         _cameraReady = false;
         _busy = false;
         _isSwitchingCamera = false;
-        _isCameraSwitchWaitingForGeneration = false;
+        _isWaitingForRemoteVideo = false;
         _isLoading = false;
         _lastError = null;
       });
@@ -658,6 +672,7 @@ class _RealtimePageState extends State<RealtimePage>
                       child: XmaxRealtimeVideoView(
                         localTrack: _localStream?.videoTrack,
                         remoteTrack: _remoteStream?.videoTrack,
+                        onRemoteVideoReady: _remoteVideoDidBecomeReady,
                         videoContentMode: VideoContentMode.fill,
                         trajectoryRenderer: _customRenderer,
                       ),

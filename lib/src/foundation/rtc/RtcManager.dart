@@ -25,6 +25,7 @@ final class RtcManager implements RtcManaging {
 
   final RtcEngineManager _engineManager;
   RtcEngineLease? _lease;
+  Future<void>? _destroyFuture;
   RTCRoom? _room;
   String _roomID = '';
   RtcEventListener? _eventListener;
@@ -44,6 +45,7 @@ final class RtcManager implements RtcManaging {
 
   @override
   Future<void> initialize() async {
+    await _destroyFuture;
     if (_lease != null) {
       return;
     }
@@ -58,16 +60,45 @@ final class RtcManager implements RtcManaging {
   }
 
   @override
-  Future<void> destroy() async {
-    await leaveRoom();
+  Future<void> destroy() {
+    final active = _destroyFuture;
+    if (active != null) return active;
+    final future = _performDestroy();
+    _destroyFuture = future;
+    return future.whenComplete(() => _destroyFuture = null);
+  }
 
+  Future<void> _performDestroy() async {
     final lease = _lease;
     _lease = null;
     _cameraPreviewReadyListener = null;
     _remoteStreamIDs.clear();
 
-    if (lease != null) {
-      await _engineManager.release(lease);
+    try {
+      await leaveRoom();
+    } catch (error) {
+      _logDestroyFailure(error);
+    } finally {
+      if (lease != null) {
+        try {
+          await _engineManager.release(lease);
+        } catch (error) {
+          _logDestroyFailure(error);
+        }
+      }
+    }
+  }
+
+  void _logDestroyFailure(Object error) {
+    try {
+      XmaxLogger.error(
+        category: XmaxLoggerCategory.rtc,
+        message:
+            '释放 RTC 资源失败 (Failed to Release RTC Resources)\n'
+            '└─ ${XmaxLogger.localized('原因：', 'Reason: ')}$error',
+      );
+    } catch (_) {
+      // Continue releasing native resources even when a diagnostic sink fails.
     }
   }
 
@@ -389,6 +420,10 @@ final class RtcManager implements RtcManaging {
     },
     onFirstRemoteVideoFrameDecoded: (streamID, info, frameInfo) {
       if (info.roomId != _roomID || _room == null) return;
+      if (frameInfo.width <= 0 || frameInfo.height <= 0) return;
+      _eventListener?.onFirstRemoteVideoFrameDecoded?.call(
+        _remoteStream(streamID, info),
+      );
       XmaxLogger.debug(
         category: XmaxLoggerCategory.rtc,
         message:

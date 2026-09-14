@@ -6,6 +6,7 @@ import '../../media/interaction/InteractionControlling.dart';
 import '../../service/realtime/RealtimeContext.dart';
 import '../../service/realtime/RealtimeVideoFormat.dart';
 import '../../stream/StreamControlling.dart';
+import 'RealtimeTiming.dart';
 
 typedef RealtimeTaskIDGenerator = String Function();
 
@@ -36,6 +37,7 @@ final class XmaxRealtimeGenerationManager {
     required RealtimeVideoFormat videoFormat,
     required RealtimeContext? context,
     required void Function() ensureCurrent,
+    RealtimeTiming? timing,
   }) async {
     final resolvedContext = validateContext(context);
 
@@ -44,6 +46,7 @@ final class XmaxRealtimeGenerationManager {
     GenerationStartConfirmation? ownedConfirmation;
 
     try {
+      timing?.beginSignal();
       final confirmation = await _streamController.beginGeneration(
         taskID: taskID,
         videoFormat: videoFormat,
@@ -57,6 +60,7 @@ final class XmaxRealtimeGenerationManager {
       }
 
       await confirmation.value;
+      timing?.matchSEI();
       if (startVersion != _startVersion) {
         throw const XmaxError(
           code: XmaxErrorCode.cancelled,
@@ -64,11 +68,6 @@ final class XmaxRealtimeGenerationManager {
         );
       }
 
-      ensureCurrent();
-
-      // Audio belongs to the SEI-selected generation stream, not every
-      // published RTC stream. Subscribe only after that stream is confirmed.
-      await _streamController.activateRemoteAudio();
       ensureCurrent();
 
       _interactionController.startInteraction(
@@ -142,7 +141,7 @@ final class XmaxRealtimeGenerationManager {
     final random = Random.secure();
     final bytes = List<int>.generate(16, (_) => random.nextInt(256));
 
-    // Encode 128 random bits directly as unpadded base64url, matching iOS.
+    // Encode 128 random bits directly as unpadded base64url.
     const alphabet =
         'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
     final output = StringBuffer('task-');

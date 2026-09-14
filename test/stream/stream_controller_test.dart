@@ -21,6 +21,77 @@ import 'package:xmax_sdk/src/stream/quality/QualityControlling.dart';
 import 'package:xmax_sdk/src/stream/room/RoomControlling.dart';
 
 void main() {
+  for (final early in [true, false]) {
+    test(
+      'decoded first frame is selected by task SEI (early=$early)',
+      () async {
+        final rtc = _FakeRtc();
+        final ready = <RemoteStream>[];
+        final controller = StreamController(
+          rtcManager: rtc,
+          roomController: _FakeRoom(),
+          encodingController: _FakeEncoding(),
+          qualityController: _FakeQuality(),
+          remoteFrameReadyListener: ready.add,
+        );
+        await controller.connect(
+          connection: const RealtimeSessionConnection(
+            roomID: 'room',
+            userID: 'local',
+            token: 'token',
+            botName: 'bot',
+          ),
+          ensureActive: () {},
+        );
+        const remote = RemoteStream(
+          roomID: 'room',
+          userID: 'bot',
+          streamID: 'stream',
+        );
+        if (early) rtc.listener!.onFirstRemoteVideoFrameDecoded!(remote);
+        expect(ready, isEmpty);
+        final generation = await controller.beginGeneration(
+          taskID: 'task',
+          videoFormat: const RealtimeVideoFormat(
+            width: 832,
+            height: 1472,
+            fps: 30,
+          ),
+          context: RealtimeContext(prompt: 'test'),
+        );
+        rtc.listener!.onSEIMessageReceived!(remote, utf8.encode('task'));
+        await generation.value;
+        if (!early) {
+          expect(ready, isEmpty);
+          rtc.listener!.onFirstRemoteVideoFrameDecoded!(remote);
+        }
+        expect(ready, [remote]);
+        // Published audio must wait for the coordinator's explicit activation.
+        rtc.listener!.onRemoteAudioPublished!(remote, true);
+        await Future<void>.delayed(Duration.zero);
+        expect(rtc.audioSubscriptions, isEmpty);
+        await controller.activateRemoteAudio();
+        expect(rtc.audioSubscriptions, [('stream', true)]);
+        await controller.stopGeneration(taskID: 'task');
+        rtc.listener!.onRemoteVideoPublished!(remote, false);
+        ready.clear();
+        final next = await controller.beginGeneration(
+          taskID: 'next',
+          videoFormat: const RealtimeVideoFormat(
+            width: 832,
+            height: 1472,
+            fps: 30,
+          ),
+          context: RealtimeContext(prompt: 'test'),
+        );
+        rtc.listener!.onSEIMessageReceived!(remote, utf8.encode('next'));
+        await next.value;
+        expect(ready, isEmpty);
+        await controller.disconnect();
+      },
+    );
+  }
+
   test(
     'late video subscription failure cannot reject a new room with reused IDs',
     () async {

@@ -5,6 +5,20 @@ import 'VideoRenderBinding.dart';
 
 final class VideoRenderHandle extends ValueNotifier<VideoRenderBinding?> {
   VideoRenderHandle(super.value);
+
+  final Set<Future<void> Function()> _removalListeners = {};
+
+  void addRemovalListener(Future<void> Function() listener) =>
+      _removalListeners.add(listener);
+
+  void removeRemovalListener(Future<void> Function() listener) =>
+      _removalListeners.remove(listener);
+
+  /// Mounted composite views can conceal the native surface before teardown.
+  /// Headless consumers have no listeners and never wait for a Flutter frame.
+  Future<void> prepareForRemoval() async {
+    await Future.wait(_removalListeners.toList().map((listener) => listener()));
+  }
 }
 
 abstract final class VideoRenderRegistry {

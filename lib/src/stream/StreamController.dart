@@ -35,6 +35,7 @@ final class StreamController implements StreamControlling {
     RealtimeErrorListener? localMediaErrorListener,
     RemoteStreamListener? remoteStreamListener,
     RemoteFrameRenderedListener? remoteFrameRenderedListener,
+    RemoteFrameRenderedListener? remoteFrameReadyListener,
     this.generationTimeout = const Duration(seconds: 15),
   }) : _rtcManager = rtcManager,
        _roomController =
@@ -45,11 +46,13 @@ final class StreamController implements StreamControlling {
        _errorListener = errorListener,
        _localMediaErrorListener = localMediaErrorListener,
        _remoteStreamListener = remoteStreamListener,
+       _remoteFrameReadyListener = remoteFrameReadyListener,
        _remoteFrameRenderedListener = remoteFrameRenderedListener {
     rtcManager.setEventListener(
       RtcEventListener(
         onRemoteVideoPublished: _onRemoteVideoPublished,
         onFirstRemoteVideoFrameRendered: _onFirstRemoteVideoFrameRendered,
+        onFirstRemoteVideoFrameDecoded: _onFirstRemoteVideoFrameDecoded,
         onRemoteAudioPublished: _onRemoteAudioPublished,
         onSEIMessageReceived: _onSEIMessageReceived,
         onError: _onError,
@@ -67,6 +70,7 @@ final class StreamController implements StreamControlling {
   final RealtimeErrorListener? _localMediaErrorListener;
   final RemoteStreamListener? _remoteStreamListener;
   final RemoteFrameRenderedListener? _remoteFrameRenderedListener;
+  final RemoteFrameRenderedListener? _remoteFrameReadyListener;
   final Duration generationTimeout;
 
   String _roomID = '';
@@ -75,10 +79,12 @@ final class StreamController implements StreamControlling {
   bool _localVideoPublished = false;
   final Set<String> _remoteVideoSubscriptions = <String>{};
   final Set<(String, String, String)> _renderedRemoteStreams = {};
+  final Set<(String, String, String)> _decodedRemoteStreams = {};
   final Map<String, String> _publishedRemoteAudioStreams = <String, String>{};
   RemoteStream? _activeRemoteStream;
   String? _subscribedRemoteAudioStreamID;
   Future<void>? _audioActivation;
+  bool _remoteAudioEnabled = false;
   int _remoteAudioVolumePercentage = 100;
   int _audioSubscriptionVersion = 0;
   String? _generationTaskID;
@@ -137,6 +143,7 @@ final class StreamController implements StreamControlling {
       );
     }
 
+    _remoteAudioEnabled = true;
     // The RTC audio stream can use an ID different from the SEI video stream.
     // If its publish event has not arrived, subscribe when that event arrives.
     final streamID = _publishedRemoteAudioStreams[stream.userID];
@@ -199,6 +206,7 @@ final class StreamController implements StreamControlling {
     // Existing remote streams may be reported while join() is still pending.
     _connectionRevision += 1;
     _renderedRemoteStreams.clear();
+    _decodedRemoteStreams.clear();
     _roomID = connection.roomID.trim();
     _botName = connection.botName?.trim() ?? '';
     try {
@@ -215,6 +223,7 @@ final class StreamController implements StreamControlling {
       _botName = '';
       _publishedRemoteAudioStreams.clear();
       _renderedRemoteStreams.clear();
+      _decodedRemoteStreams.clear();
       rethrow;
     }
   }
@@ -244,6 +253,7 @@ final class StreamController implements StreamControlling {
 
     _remoteVideoSubscriptions.clear();
     _renderedRemoteStreams.clear();
+    _decodedRemoteStreams.clear();
     _publishedRemoteAudioStreams.clear();
     _localVideoPublished = false;
     _roomID = '';
@@ -399,6 +409,11 @@ final class StreamController implements StreamControlling {
       }
     } else {
       _remoteVideoSubscriptions.remove(stream.streamID);
+      _decodedRemoteStreams.remove((
+        stream.roomID,
+        stream.userID,
+        stream.streamID,
+      ));
       _renderedRemoteStreams.remove((
         stream.roomID,
         stream.userID,
@@ -409,6 +424,18 @@ final class StreamController implements StreamControlling {
         unawaited(_deactivateRemoteAudio());
         _clearRemoteStream();
       }
+    }
+  }
+
+  void _onFirstRemoteVideoFrameDecoded(RemoteStream stream) {
+    if (!_isExpectedRemote(stream)) return;
+    _decodedRemoteStreams.add((stream.roomID, stream.userID, stream.streamID));
+    final active = _activeRemoteStream;
+    if (active != null &&
+        active.roomID == stream.roomID &&
+        active.userID == stream.userID &&
+        active.streamID == stream.streamID) {
+      _remoteFrameReadyListener?.call(stream);
     }
   }
 
@@ -449,6 +476,7 @@ final class StreamController implements StreamControlling {
   }
 
   Future<void> _activatePublishedAudio() async {
+    if (!_remoteAudioEnabled) return;
     final revision = _audioSubscriptionVersion;
     final connectionRevision = _connectionRevision;
     try {
@@ -507,7 +535,7 @@ final class StreamController implements StreamControlling {
       );
       return;
     }
-    // Match iOS: os/index query parameters describe a frame, not its task.
+    // os/index query parameters describe a frame, not its task.
     // Compare the complete base ID, while retaining the room/bot identity check.
     final receivedID = message.split('?').first;
     final currentID = taskID.split('?').first;
@@ -532,6 +560,13 @@ final class StreamController implements StreamControlling {
     );
     _activeRemoteStream = stream;
     _remoteStreamListener?.call(stream);
+    if (_decodedRemoteStreams.contains((
+      stream.roomID,
+      stream.userID,
+      stream.streamID,
+    ))) {
+      _remoteFrameReadyListener?.call(stream);
+    }
     if (_renderedRemoteStreams.contains((
       stream.roomID,
       stream.userID,
@@ -581,6 +616,7 @@ final class StreamController implements StreamControlling {
     );
 
     _generationTaskID = null;
+    _remoteAudioEnabled = false;
     _activeRemoteStream = null;
     await _deactivateRemoteAudio();
 
