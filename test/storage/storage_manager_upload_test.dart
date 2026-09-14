@@ -16,46 +16,54 @@ void main() {
     () async {
       final messenger =
           TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
-      const initialize = BasicMessageChannel<Object?>(
-        'dev.flutter.pigeon.CosApi.initWithSessionCredential',
-        CosApi.codec,
-      );
-      const register = BasicMessageChannel<Object?>(
-        'dev.flutter.pigeon.CosApi.registerTransferManger',
-        CosApi.codec,
-      );
-      const upload = BasicMessageChannel<Object?>(
-        'dev.flutter.pigeon.CosTransferApi.upload',
-        CosTransferApi.codec,
-      );
+      void mockChannel(
+        String method,
+        Future<Object?> Function(Object?) handler,
+      ) {
+        // Generated channel names differ between supported plugin versions.
+        // Decode request records without relying on generated codec symbols.
+        for (final prefix in [
+          'dev.flutter.pigeon.',
+          'dev.flutter.pigeon.tencentcloud_cos_sdk_plugin.',
+        ]) {
+          final channel = BasicMessageChannel<Object?>(
+            '$prefix$method',
+            const _CosRequestCodec(),
+          );
+          messenger.setMockDecodedMessageHandler<Object?>(channel, handler);
+          addTearDown(
+            () =>
+                messenger.setMockDecodedMessageHandler<Object?>(channel, null),
+          );
+        }
+      }
+
       final initialized = Completer<void>();
       final initStarted = Completer<void>();
       var initCount = 0;
       var registerCount = 0;
       final requests = <List<Object?>>[];
 
-      messenger.setMockDecodedMessageHandler<Object?>(initialize, (_) async {
+      mockChannel('CosApi.initWithSessionCredential', (_) async {
         initCount += 1;
         initStarted.complete();
         await initialized.future;
         return <Object?>[null];
       });
-      messenger.setMockDecodedMessageHandler<Object?>(register, (
-        message,
-      ) async {
+      mockChannel('CosApi.registerTransferManger', (message) async {
         expect(initialized.isCompleted, isTrue);
         registerCount += 1;
         final args = message! as List<Object?>;
-        final config = args[2]! as TransferConfig;
+        final config = TransferConfig.decode(args[2]!);
         expect(config.forceSimpleUpload, isTrue);
         expect(config.divisionForUpload, 0x7FFFFFFFFFFFFFFF);
         return <Object?>[args[0]];
       });
-      messenger.setMockDecodedMessageHandler<Object?>(upload, (message) async {
+      mockChannel('CosTransferApi.upload', (message) async {
         final args = message! as List<Object?>;
         requests.add(args);
         expect(args[6], isNull, reason: 'Never resume a multipart upload');
-        final credential = args[16]! as SessionQCloudCredentials;
+        final credential = SessionQCloudCredentials.decode(args[16]!);
         expect(
           credential.token,
           args[1] == 'image-123' ? 'image-token' : 'video-token',
@@ -66,11 +74,6 @@ void main() {
           'etag': 'test-etag',
         }, null);
         return <Object?>['test-upload'];
-      });
-      addTearDown(() {
-        messenger.setMockDecodedMessageHandler<Object?>(initialize, null);
-        messenger.setMockDecodedMessageHandler<Object?>(register, null);
-        messenger.setMockDecodedMessageHandler<Object?>(upload, null);
       });
 
       final directory = await Directory.systemTemp.createTemp(
@@ -131,4 +134,16 @@ void main() {
       expect(results.map((result) => result.etag), everyElement('test-etag'));
     },
   );
+}
+
+/// Pigeon wraps each custom request value in a type tag followed by its fields.
+/// Leave those fields intact so the installed plugin can decode its own model.
+class _CosRequestCodec extends StandardMessageCodec {
+  const _CosRequestCodec();
+
+  @override
+  Object? readValueOfType(int type, ReadBuffer buffer) {
+    if (type >= 128 && type <= 146) return readValue(buffer);
+    return super.readValueOfType(type, buffer);
+  }
 }
