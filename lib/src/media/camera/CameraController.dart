@@ -30,13 +30,17 @@ final class CameraController {
   final PermissionManaging _permissionManager;
   final MediaServicing _mediaService;
   RealtimeVideoTrack? _activeTrack;
+  RealtimeVideoTrack? _preparingTrack;
   RealtimeCameraPreviewReadyListener? _previewReadyListener;
+  bool _hasCapturedFrame = false;
+  bool _isPreviewAttached = false;
+  bool _didNotifyPreviewReady = false;
 
   RealtimeVideoTrack? get currentTrack => _activeTrack;
 
   void setPreviewReadyListener(RealtimeCameraPreviewReadyListener? listener) {
     _previewReadyListener = listener;
-    _rtcManager.setCameraPreviewReadyListener(listener);
+    if (_didNotifyPreviewReady) listener?.call();
   }
 
   Future<RealtimeMediaStream> createLocalCameraStream({
@@ -58,13 +62,18 @@ final class CameraController {
       position: position,
     );
 
+    _preparingTrack = track;
+    _hasCapturedFrame = false;
+    _isPreviewAttached = false;
+    _didNotifyPreviewReady = false;
+
     try {
       await _permissionManager.ensureCameraPermission();
 
       // RtcManager.destroy() releases its native callback references. Keep the
       // public manager-level listener stable across close() and reinstall it
       // whenever a new RTC camera session starts.
-      _rtcManager.setCameraPreviewReadyListener(_previewReadyListener);
+      _rtcManager.setCameraPreviewReadyListener(() => _capturedFrame(track));
       await _rtcManager.switchCamera(position: position);
       await _rtcManager.startVideoCapture(
         width: format.width,
@@ -73,10 +82,19 @@ final class CameraController {
       );
 
       // Register rendering only after capture has started successfully.
-      VideoRenderRegistry.register(track, const LocalVideoRenderBinding());
+      VideoRenderRegistry.register(
+        track,
+        LocalVideoRenderBinding(
+          onPreviewAttached: () => _previewAttached(track),
+        ),
+      );
       _activeTrack = track;
+      _notifyPreviewReady(track);
       return createRealtimeMediaStream(id: localStreamID, videoTrack: track);
     } catch (error) {
+      if (identical(_preparingTrack, track)) {
+        _preparingTrack = null;
+      }
       // Roll back both registry and capture when startup fails midway.
       VideoRenderRegistry.unregister(track);
       try {
@@ -96,12 +114,40 @@ final class CameraController {
   Future<void> stopLocalCameraStream() async {
     final track = _activeTrack;
     _activeTrack = null;
+    _preparingTrack = null;
+    _hasCapturedFrame = false;
+    _isPreviewAttached = false;
+    _didNotifyPreviewReady = false;
 
     if (track != null) {
       VideoRenderRegistry.unregister(track);
     }
 
     await _rtcManager.stopVideoCapture();
+  }
+
+  void _capturedFrame(RealtimeVideoTrack track) {
+    if (!identical(_preparingTrack, track)) return;
+    _hasCapturedFrame = true;
+    _notifyPreviewReady(track);
+  }
+
+  void _previewAttached(RealtimeVideoTrack track) {
+    if (!identical(_preparingTrack, track)) return;
+    _isPreviewAttached = true;
+    _notifyPreviewReady(track);
+  }
+
+  void _notifyPreviewReady(RealtimeVideoTrack track) {
+    if (_didNotifyPreviewReady ||
+        !_hasCapturedFrame ||
+        !_isPreviewAttached ||
+        !identical(_activeTrack, track)) {
+      return;
+    }
+
+    _didNotifyPreviewReady = true;
+    _previewReadyListener?.call();
   }
 
   Future<RealtimeMediaStream> switchCamera() async {

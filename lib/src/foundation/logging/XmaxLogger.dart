@@ -68,6 +68,10 @@ abstract final class XmaxLogger {
 
   static void _defaultSink(XmaxLogLevel level, String message) {
     developer.log(message, name: 'ai.xmax.XmaxSDK', level: level.value);
+    // developer.log only emits DevTools events. Mirror enabled SDK logs to
+    // Flutter's throttled console output for Xcode/Android Studio, including
+    // Profile and Release builds; loggerOptions remains the opt-in switch.
+    debugPrint(message);
   }
 
   @visibleForTesting

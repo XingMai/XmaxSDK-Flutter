@@ -23,6 +23,42 @@ void main() {
     final binding = VideoRenderRegistry.handleFor(track)?.value;
     expect(binding, isA<RemoteVideoRenderBinding>());
     expect((binding as RemoteVideoRenderBinding).stream, stream);
+    expect(binding.firstFrameRendered, isFalse);
+  });
+
+  test('only the selected remote stream can reveal its first frame', () {
+    final controller = RenderController();
+    final track = createRealtimeVideoTrack(id: 'remote-track');
+    controller.registerRemoteTrack(track, interactionListener: (_) {});
+    addTearDown(() => controller.resetRemoteTrack(track));
+    controller.setRemoteStream(stream);
+
+    controller.markRemoteFrameRendered(
+      const RemoteStream(
+        roomID: 'room-id',
+        userID: 'bot-id',
+        streamID: 'stale-stream',
+      ),
+    );
+    var binding =
+        VideoRenderRegistry.handleFor(track)?.value as RemoteVideoRenderBinding;
+    expect(binding.firstFrameRendered, isFalse);
+
+    controller.markRemoteFrameRendered(stream);
+    binding =
+        VideoRenderRegistry.handleFor(track)?.value as RemoteVideoRenderBinding;
+    expect(binding.firstFrameRendered, isTrue);
+
+    controller.setRemoteStream(
+      const RemoteStream(
+        roomID: 'room-id',
+        userID: 'bot-id',
+        streamID: 'next-stream',
+      ),
+    );
+    binding =
+        VideoRenderRegistry.handleFor(track)?.value as RemoteVideoRenderBinding;
+    expect(binding.firstFrameRendered, isFalse);
   });
 
   test('clearing the selected remote stream clears its binding', () {

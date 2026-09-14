@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xmax_sdk/src/foundation/rtc/RtcModels.dart';
 import 'package:xmax_sdk/src/media/interaction/InteractionFrame.dart';
@@ -7,10 +8,31 @@ import 'package:xmax_sdk/src/render/trajectory/TrajectoryRegistry.dart';
 import 'package:xmax_sdk/src/render/video/VideoRenderBinding.dart';
 import 'package:xmax_sdk/src/render/video/VideoRenderRegistry.dart';
 import 'package:xmax_sdk/src/render/video/XmaxRealtimeVideoView.dart';
+import 'package:xmax_sdk/src/render/video/XmaxVideoView.dart';
 import 'package:xmax_sdk/src/service/realtime/RealtimeVideoTrack.dart';
 
 void main() {
-  testWidgets('remote layer follows its RTC binding automatically', (
+  testWidgets('mounted local preview reports its attachment once', (
+    tester,
+  ) async {
+    final localTrack = createRealtimeVideoTrack(id: 'local');
+    var attachments = 0;
+    VideoRenderRegistry.register(
+      localTrack,
+      LocalVideoRenderBinding(onPreviewAttached: () => attachments += 1),
+    );
+    addTearDown(() => VideoRenderRegistry.unregister(localTrack));
+
+    await tester.pumpWidget(
+      MaterialApp(home: XmaxVideoView(track: localTrack)),
+    );
+    expect(attachments, 1);
+
+    await tester.pump();
+    expect(attachments, 1);
+  });
+
+  testWidgets('remote fades in only after its first rendered frame', (
     tester,
   ) async {
     final remoteTrack = createRealtimeVideoTrack(id: 'remote');
@@ -21,7 +43,7 @@ void main() {
       MaterialApp(home: XmaxRealtimeVideoView(remoteTrack: remoteTrack)),
     );
 
-    expect(_remoteOpacity(tester), 0);
+    expect(_remoteOpacity(tester), lessThan(0.01));
 
     VideoRenderRegistry.register(
       remoteTrack,
@@ -30,12 +52,65 @@ void main() {
       ),
     );
     await tester.pump();
+    expect(_remoteOpacity(tester), lessThan(0.01));
+    final opacity = tester.renderObject<RenderOpacity>(find.byType(Opacity));
+    // A nonzero double can still round to alpha=0 and suppress platform-view
+    // painting. Verify the render object's behavior, not only the widget value.
+    expect(opacity.paintsChild(opacity.child!), isTrue);
+
+    VideoRenderRegistry.register(
+      remoteTrack,
+      const RemoteVideoRenderBinding(
+        RemoteStream(roomID: 'room', userID: 'bot', streamID: 'stream'),
+        firstFrameRendered: true,
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 150));
+    expect(_remoteOpacity(tester), greaterThan(0.01));
+    expect(_remoteOpacity(tester), lessThan(1));
+    await tester.pump(const Duration(milliseconds: 150));
     expect(_remoteOpacity(tester), 1);
 
     VideoRenderRegistry.register(remoteTrack, null);
     await tester.pump();
 
-    expect(_remoteOpacity(tester), 0);
+    expect(_remoteOpacity(tester), lessThan(0.01));
+  });
+
+  testWidgets('removing remote track keeps the local preview mounted', (
+    tester,
+  ) async {
+    final localTrack = createRealtimeVideoTrack(id: 'local-preview');
+    final remoteTrack = createRealtimeVideoTrack(id: 'remote-result');
+    VideoRenderRegistry.register(localTrack, const LocalVideoRenderBinding());
+    VideoRenderRegistry.register(
+      remoteTrack,
+      const RemoteVideoRenderBinding(
+        RemoteStream(roomID: 'room', userID: 'bot', streamID: 'stream'),
+        firstFrameRendered: true,
+      ),
+    );
+    addTearDown(() {
+      VideoRenderRegistry.unregister(localTrack);
+      VideoRenderRegistry.unregister(remoteTrack);
+    });
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: XmaxRealtimeVideoView(
+          localTrack: localTrack,
+          remoteTrack: remoteTrack,
+        ),
+      ),
+    );
+    final localElement = tester.element(find.byType(XmaxVideoView).first);
+
+    await tester.pumpWidget(
+      MaterialApp(home: XmaxRealtimeVideoView(localTrack: localTrack)),
+    );
+
+    expect(tester.element(find.byType(XmaxVideoView)), same(localElement));
   });
 
   testWidgets(
@@ -48,6 +123,7 @@ void main() {
         remoteTrack,
         const RemoteVideoRenderBinding(
           RemoteStream(roomID: 'room', userID: 'bot', streamID: 'stream'),
+          firstFrameRendered: true,
         ),
       );
       TrajectoryRegistry.register(

@@ -1,5 +1,7 @@
 import 'dart:convert';
+import 'dart:ui';
 
+import '../../foundation/runtime/RuntimeInfo.dart';
 import '../../service/realtime/RealtimeContext.dart';
 import '../../service/realtime/RealtimePoint.dart';
 import '../../service/realtime/RealtimeVideoFormat.dart';
@@ -10,12 +12,14 @@ abstract final class RoomEvent {
     required String taskID,
     required RealtimeVideoFormat videoFormat,
     required RealtimeContext context,
+    Size? targetSize,
   }) => _generation(
     event: 'start',
     userID: userID,
     taskID: taskID,
     videoFormat: videoFormat,
     context: context,
+    targetSize: targetSize,
   );
 
   static String changeCondition({
@@ -23,16 +27,29 @@ abstract final class RoomEvent {
     required String taskID,
     required RealtimeVideoFormat videoFormat,
     required RealtimeContext context,
+    Size? targetSize,
   }) => _generation(
     event: 'change_condition',
     userID: userID,
     taskID: taskID,
     videoFormat: videoFormat,
     context: context,
+    targetSize: targetSize,
   );
 
+  static String changeTargetSize({
+    required String userID,
+    required String taskID,
+    required Size targetSize,
+  }) => _encode(<String, Object?>{
+    'event': 'change_target_size',
+    'params': <String, Object?>{'target_size': _size(targetSize)},
+    'user_id': userID,
+    'uid': taskID,
+  });
+
   static String stop({required String userID, required String taskID}) =>
-      jsonEncode(<String, Object?>{
+      _encode(<String, Object?>{
         'event': 'stop',
         'user_id': userID,
         'uid': taskID,
@@ -42,7 +59,7 @@ abstract final class RoomEvent {
     required String userID,
     required String taskID,
     required List<RealtimePoint> points,
-  }) => jsonEncode(<String, Object?>{
+  }) => _encode(<String, Object?>{
     'event': 'tracks',
     'tracks': points.map((point) => <double>[point.x, point.y]).toList(),
     'user_id': userID,
@@ -50,7 +67,7 @@ abstract final class RoomEvent {
   });
 
   static String heartbeat({required String userID}) =>
-      jsonEncode(<String, Object?>{'event': 'heartbeat', 'user_id': userID});
+      _encode(<String, Object?>{'event': 'heartbeat', 'user_id': userID});
 
   static String _generation({
     required String event,
@@ -58,6 +75,7 @@ abstract final class RoomEvent {
     required String taskID,
     required RealtimeVideoFormat videoFormat,
     required RealtimeContext context,
+    Size? targetSize,
   }) {
     final params = <String, Object?>{
       'model': 'default',
@@ -65,17 +83,29 @@ abstract final class RoomEvent {
       'prompt': context.prompt,
     };
     final referencePath = context.referencePath;
+    if (targetSize != null) {
+      params['target_size'] = _size(targetSize);
+    }
     if (referencePath != null) {
       params['ref_image_path'] = referencePath;
     }
 
     // Match iOS and Android exactly: omitting `ref_image_path` clears the
     // previous condition, while an explicit JSON null is ignored upstream.
-    return jsonEncode(<String, Object?>{
+    return _encode(<String, Object?>{
       'event': event,
       'params': params,
       'user_id': userID,
       'uid': taskID,
     });
   }
+
+  static List<int> _size(Size value) => <int>[
+    value.width.toInt(),
+    value.height.toInt(),
+  ];
+
+  static String _encode(Map<String, Object?> event) => jsonEncode(
+    <String, Object?>{...event, 'runtime': RuntimeInfo.current.toJson()},
+  );
 }

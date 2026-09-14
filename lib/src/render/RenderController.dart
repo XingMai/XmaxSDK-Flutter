@@ -34,6 +34,26 @@ final class RenderController implements RenderControlling {
     }
   }
 
+  void markRemoteFrameRendered(RemoteStream stream) {
+    final track = _remoteTrack;
+    if (track == null) return;
+
+    final handle = VideoRenderRegistry.handleFor(track);
+    final binding = handle?.value;
+    if (binding is! RemoteVideoRenderBinding ||
+        binding.firstFrameRendered ||
+        binding.stream.roomID != stream.roomID ||
+        binding.stream.userID != stream.userID ||
+        binding.stream.streamID != stream.streamID) {
+      return;
+    }
+
+    VideoRenderRegistry.register(
+      track,
+      RemoteVideoRenderBinding(stream, firstFrameRendered: true),
+    );
+  }
+
   @override
   void resetRemoteTrack(RealtimeVideoTrack? track) {
     final target = track ?? _remoteTrack;

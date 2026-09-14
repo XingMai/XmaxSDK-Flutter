@@ -9,9 +9,40 @@ void main() {
     expect(CameraPosition.front.value, 'front');
     expect(VideoContentMode.fill.value, 'fill');
     expect(RealtimeConnectionState.generating.value, 'Generating');
+    expect(RealtimeConnectionState.values.map((state) => state.value), <String>[
+      'Idle',
+      'Preparing',
+      'Ready',
+      'Connecting',
+      'Connected',
+      'Generating',
+      'Disconnecting',
+    ]);
     expect(RealtimeNetworkQualityLevel.veryBad.value, 'VeryBad');
     expect(RealtimePerformanceStatus.recovered.value, 'Recovered');
     expect(XmaxErrorCode.unsafeImage.value, 'UNSAFE_IMAGE');
+  });
+
+  test('RealtimeState reason follows the iOS value contract', () {
+    const error = XmaxError(
+      code: XmaxErrorCode.rtcError,
+      message: 'RTC failed',
+    );
+    final failure = RealtimeReason.failure(error);
+
+    expect(failure, RealtimeReason.failure(error));
+    expect(failure.error, error);
+    expect(RealtimeReason.normal.error, isNull);
+    expect(RealtimeReason.orientationChanged, isNot(RealtimeReason.normal));
+    expect(
+      RealtimeState(
+        connectionState: RealtimeConnectionState.ready,
+        reason: failure,
+      ),
+      isNot(
+        const RealtimeState(connectionState: RealtimeConnectionState.ready),
+      ),
+    );
   });
 
   test('RealtimeModel follows iOS input and camera defaults', () {

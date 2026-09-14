@@ -5,11 +5,18 @@ sealed class VideoRenderBinding {
 }
 
 final class LocalVideoRenderBinding extends VideoRenderBinding {
-  const LocalVideoRenderBinding();
+  const LocalVideoRenderBinding({this.onPreviewAttached});
+
+  /// Called after Flutter creates the native preview platform view.
+  final void Function()? onPreviewAttached;
 }
 
 final class RemoteVideoRenderBinding extends VideoRenderBinding {
-  const RemoteVideoRenderBinding(this.stream);
+  const RemoteVideoRenderBinding(
+    this.stream, {
+    this.firstFrameRendered = false,
+  });
 
   final RemoteStream stream;
+  final bool firstFrameRendered;
 }

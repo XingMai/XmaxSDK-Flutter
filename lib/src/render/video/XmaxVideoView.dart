@@ -155,10 +155,23 @@ final class _XmaxVideoViewState extends State<XmaxVideoView>
       viewContext.viewType = 'texture';
     }
 
+    if (binding is LocalVideoRenderBinding) {
+      final track = widget.track;
+      // This VolcEngine plugin version declares onPlatformViewCreated but does
+      // not forward it from its platform view. The first completed Flutter
+      // frame is the earliest reliable signal that the preview is mounted.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && identical(widget.track, track)) {
+          binding.onPreviewAttached?.call();
+        }
+      });
+    }
+
     return RTCSurfaceView(
       key: ValueKey<String>(
         '${viewContext.canvasType}:${viewContext.roomId}:'
-        '${viewContext.userId}:${viewContext.streamId}',
+        '${viewContext.userId}:${viewContext.streamId}:'
+        '${identityHashCode(widget.track)}',
       ),
       context: viewContext,
       renderMode: widget.videoContentMode == VideoContentMode.fit

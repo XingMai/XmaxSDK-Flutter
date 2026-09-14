@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xmax_sdk/src/core/realtime/RealtimeConfiguration.dart';
@@ -51,6 +52,11 @@ void main() {
     final localStream = await manager.createLocalCameraStream(
       videoFormat: _Dependencies.format,
     );
+    expect(
+      (await manager.currentState).connectionState,
+      RealtimeConnectionState.preparing,
+    );
+    dependencies.media.notifyPreviewReady();
     final remoteStream = await manager.startGeneration(
       localStream: localStream,
       context: RealtimeContext(prompt: 'animate naturally'),
@@ -63,6 +69,8 @@ void main() {
     );
     expect(states, <RealtimeConnectionState>[
       RealtimeConnectionState.idle,
+      RealtimeConnectionState.preparing,
+      RealtimeConnectionState.ready,
       RealtimeConnectionState.connecting,
       RealtimeConnectionState.connected,
       RealtimeConnectionState.generating,
@@ -76,11 +84,24 @@ void main() {
     await manager.disconnect();
     expect(
       (await manager.currentState).connectionState,
-      RealtimeConnectionState.disconnected,
+      RealtimeConnectionState.ready,
     );
+    expect(states.skip(6), <RealtimeConnectionState>[
+      RealtimeConnectionState.connected,
+      RealtimeConnectionState.disconnecting,
+      RealtimeConnectionState.ready,
+    ]);
+    expect((await manager.currentState).reason, RealtimeReason.normal);
     expect(dependencies.media.stopCount, 0);
     await manager.close();
     expect(dependencies.media.stopCount, 1);
+    expect(
+      await manager.currentState,
+      const RealtimeState(
+        connectionState: RealtimeConnectionState.idle,
+        reason: RealtimeReason.normal,
+      ),
+    );
   });
 
   test('audio volume validation reports the same public error', () async {
@@ -99,6 +120,201 @@ void main() {
       ),
     );
     expect(reported?.code, XmaxErrorCode.invalidConfiguration);
+  });
+
+  test(
+    'camera preparation waits for preview and disconnect preserves it',
+    () async {
+      final dependencies = _Dependencies();
+      final manager = dependencies.manager;
+      final localStream = await manager.createLocalCameraStream(
+        videoFormat: _Dependencies.format,
+      );
+
+      expect(
+        (await manager.currentState).connectionState,
+        RealtimeConnectionState.preparing,
+      );
+      await manager.disconnect();
+      expect(
+        (await manager.currentState).connectionState,
+        RealtimeConnectionState.preparing,
+      );
+
+      dependencies.media.notifyPreviewReady();
+      expect(
+        (await manager.currentState).connectionState,
+        RealtimeConnectionState.ready,
+      );
+      var lateReadyNotifications = 0;
+      await manager.setCameraPreviewReadyListener(
+        () => lateReadyNotifications += 1,
+      );
+      expect(lateReadyNotifications, 1);
+
+      await manager.connect(localStream: localStream);
+      await manager.disconnect();
+      expect((await manager.currentState).reason, RealtimeReason.normal);
+      expect(
+        (await manager.currentState).connectionState,
+        RealtimeConnectionState.ready,
+      );
+
+      await manager.stopLocalCameraStream();
+      expect(
+        await manager.currentState,
+        const RealtimeState(connectionState: RealtimeConnectionState.idle),
+      );
+      dependencies.media.notifyPreviewReady();
+      expect(
+        (await manager.currentState).connectionState,
+        RealtimeConnectionState.idle,
+      );
+    },
+  );
+
+  test('camera creation failure returns idle with a failure reason', () async {
+    final dependencies = _Dependencies();
+    final manager = dependencies.manager;
+    dependencies.media.createError = StateError('camera unavailable');
+    final states = <RealtimeState>[];
+    await manager.setStateListener(states.add);
+
+    await expectLater(
+      manager.createLocalCameraStream(videoFormat: _Dependencies.format),
+      throwsA(isA<XmaxError>()),
+    );
+
+    expect(
+      states.map((state) => state.connectionState),
+      <RealtimeConnectionState>[
+        RealtimeConnectionState.idle,
+        RealtimeConnectionState.preparing,
+        RealtimeConnectionState.idle,
+      ],
+    );
+    expect(states.last.reason?.error?.message, contains('camera unavailable'));
+    expect(states.last.reason, isNot(RealtimeReason.normal));
+  });
+
+  test('late preview callback never regresses a connected state', () async {
+    final dependencies = _Dependencies();
+    final manager = dependencies.manager;
+    final localStream = await manager.createLocalCameraStream(
+      videoFormat: _Dependencies.format,
+    );
+    await manager.connect(localStream: localStream);
+
+    dependencies.media.notifyPreviewReady();
+    expect(
+      (await manager.currentState).connectionState,
+      RealtimeConnectionState.connected,
+    );
+  });
+
+  test(
+    'connection failure retains camera and reports the failure reason',
+    () async {
+      final dependencies = _Dependencies();
+      final manager = dependencies.manager;
+      final localStream = await manager.createLocalCameraStream(
+        videoFormat: _Dependencies.format,
+      );
+      dependencies.media.notifyPreviewReady();
+      dependencies.stream.connectError = StateError('room join failed');
+
+      await expectLater(
+        manager.connect(localStream: localStream),
+        throwsA(isA<XmaxError>()),
+      );
+
+      final state = await manager.currentState;
+      expect(state.connectionState, RealtimeConnectionState.ready);
+      expect(state.reason?.error?.message, contains('room join failed'));
+      expect(dependencies.media.currentTrack, isNotNull);
+    },
+  );
+
+  test('heartbeat failure returns to ready with the failure reason', () async {
+    final dependencies = _Dependencies();
+    final manager = dependencies.manager;
+    final localStream = await manager.createLocalCameraStream(
+      videoFormat: _Dependencies.format,
+    );
+    dependencies.media.notifyPreviewReady();
+    await manager.connect(localStream: localStream);
+
+    await dependencies.sessions.failHeartbeat(StateError('heartbeat stopped'));
+
+    final state = await manager.currentState;
+    expect(state.connectionState, RealtimeConnectionState.ready);
+    expect(state.reason?.error?.message, contains('heartbeat stopped'));
+    expect(dependencies.media.currentTrack, isNotNull);
+  });
+
+  test(
+    'explicit disconnect reason is retained until the next operation',
+    () async {
+      final dependencies = _Dependencies();
+      final manager = dependencies.manager;
+      final localStream = await manager.createLocalCameraStream(
+        videoFormat: _Dependencies.format,
+      );
+      dependencies.media.notifyPreviewReady();
+      await manager.connect(localStream: localStream);
+
+      await manager.disconnect(reason: RealtimeReason.orientationChanged);
+      expect(
+        (await manager.currentState).reason,
+        RealtimeReason.orientationChanged,
+      );
+      expect(
+        (await manager.currentState).connectionState,
+        RealtimeConnectionState.ready,
+      );
+
+      await manager.connect(localStream: localStream);
+      expect((await manager.currentState).reason, isNull);
+    },
+  );
+
+  test('close cancels and cleans up an in-flight camera creation', () async {
+    final dependencies = _Dependencies();
+    final manager = dependencies.manager;
+    final gate = Completer<void>();
+    dependencies.media.createGate = gate;
+
+    final creation = manager.createLocalCameraStream(
+      videoFormat: _Dependencies.format,
+    );
+    final creationExpectation = expectLater(
+      creation,
+      throwsA(
+        isA<XmaxError>().having(
+          (error) => error.code,
+          'code',
+          XmaxErrorCode.cancelled,
+        ),
+      ),
+    );
+    expect(
+      (await manager.currentState).connectionState,
+      RealtimeConnectionState.preparing,
+    );
+
+    final closing = manager.close();
+    gate.complete();
+    await Future.wait(<Future<void>>[creationExpectation, closing]);
+
+    expect(dependencies.media.stopCount, 1);
+    expect(dependencies.media.currentTrack, isNull);
+    expect(
+      await manager.currentState,
+      const RealtimeState(
+        connectionState: RealtimeConnectionState.idle,
+        reason: RealtimeReason.normal,
+      ),
+    );
   });
 
   test(
@@ -327,28 +543,42 @@ final class _FakeMedia implements MediaControlling {
 
   late final RealtimeVideoTrack track;
   late final RealtimeMediaStream stream;
+  bool _active = false;
+  RealtimeCameraPreviewReadyListener? _previewReadyListener;
+  Object? createError;
+  Completer<void>? createGate;
   int stopCount = 0;
   int switchCount = 0;
 
   @override
-  RealtimeVideoFormat? get currentVideoFormat => track.videoFormat;
+  RealtimeVideoFormat? get currentVideoFormat =>
+      _active ? track.videoFormat : null;
   @override
-  RealtimeVideoTrack? get currentTrack => track;
+  RealtimeVideoTrack? get currentTrack => _active ? track : null;
   @override
   bool get hasAudio => false;
   @override
   Future<RealtimeMediaStream> createLocalCameraStream({
     required RealtimeVideoFormat videoFormat,
     required CameraPosition position,
-  }) async => stream;
+  }) async {
+    await createGate?.future;
+    if (createError case final error?) throw error;
+    _active = true;
+    return stream;
+  }
+
   @override
-  bool owns(RealtimeMediaStream stream) => identical(this.stream, stream);
+  bool owns(RealtimeMediaStream stream) =>
+      _active && identical(this.stream, stream);
   @override
   Future<void> setLocalAudioVolume(double volume) async {}
   @override
   void setCameraPreviewReadyListener(
     RealtimeCameraPreviewReadyListener? listener,
-  ) {}
+  ) => _previewReadyListener = listener;
+
+  void notifyPreviewReady() => _previewReadyListener?.call();
   @override
   void startInteraction({
     required String taskID,
@@ -357,9 +587,17 @@ final class _FakeMedia implements MediaControlling {
   @override
   void stopInteraction() {}
   @override
-  Future<void> stopLocalCameraStream() async => stopCount += 1;
+  Future<void> stopLocalCameraStream() async {
+    stopCount += 1;
+    _active = false;
+  }
+
   @override
-  Future<void> stopLocalStream() async => stopCount += 1;
+  Future<void> stopLocalStream() async {
+    stopCount += 1;
+    _active = false;
+  }
+
   @override
   void submitInteraction(InteractionFrame frame) {}
   @override
@@ -381,6 +619,7 @@ final class _FakeStream implements StreamControlling {
   Completer<void>? firstUpdateStarted;
   Completer<void>? updateGate;
   Object? generationStartError;
+  Object? connectError;
   @override
   bool get hasGenerationTask => generation;
   @override
@@ -390,6 +629,7 @@ final class _FakeStream implements StreamControlling {
     required String taskID,
     required RealtimeVideoFormat videoFormat,
     required RealtimeContext context,
+    Size? targetSize,
   }) async {
     final startError = generationStartError;
     if (startError != null) throw startError;
@@ -435,7 +675,11 @@ final class _FakeStream implements StreamControlling {
   Future<void> connect({
     required RealtimeSessionConnection connection,
     required void Function() ensureActive,
-  }) async => ensureActive();
+  }) async {
+    if (connectError case final error?) throw error;
+    ensureActive();
+  }
+
   @override
   Future<void> disconnect() async {
     disconnectCount += 1;
@@ -447,6 +691,12 @@ final class _FakeStream implements StreamControlling {
     required String taskID,
     required List<RealtimePoint> points,
   }) async {}
+  @override
+  Future<void> changeTargetSize({
+    required String taskID,
+    required Size targetSize,
+    required void Function() ensureActive,
+  }) async => ensureActive();
   @override
   void setNetworkQualityListener(RealtimeNetworkQualityListener? listener) {}
   @override
@@ -465,6 +715,7 @@ final class _FakeStream implements StreamControlling {
     required String taskID,
     required RealtimeVideoFormat videoFormat,
     required RealtimeContext context,
+    Size? targetSize,
   }) async {
     updatedPrompts.add(context.prompt);
     final started = firstUpdateStarted;
@@ -488,6 +739,11 @@ final class _FakeRender implements RenderControlling {
 }
 
 final class _FakeSessions implements RealtimeSessionServicing {
+  RealtimeSessionHeartbeatFailureHandler? _heartbeatFailureHandler;
+
+  Future<void> failHeartbeat(Object error) async =>
+      _heartbeatFailureHandler?.call('session-1', error);
+
   @override
   Future<void> closeSession({required String sessionID}) async {}
   @override
@@ -505,7 +761,7 @@ final class _FakeSessions implements RealtimeSessionServicing {
   void startHeartbeat({
     required String sessionID,
     required RealtimeSessionHeartbeatFailureHandler onFailure,
-  }) {}
+  }) => _heartbeatFailureHandler = onFailure;
   @override
-  void stopHeartbeat() {}
+  void stopHeartbeat() => _heartbeatFailureHandler = null;
 }

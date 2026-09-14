@@ -138,7 +138,7 @@ final class XLabLocalization extends ChangeNotifier {
     'realtime.reference.prompt.delete': '删除自定义模式参考图',
     'realtime.reference.prompt.uploading': '正在上传自定义模式参考图',
     'realtime.reference.prompt.retry': '重试上传自定义模式参考图',
-    'realtime.performance.limited': '设备性能受限，实时画质可能下降',
+    'realtime.performance.limited': '网络或设备性能受限，实时画质可能下降',
     'realtime.loading': '正在加载实时画面',
     'storage.select': '选择图片或视频',
     'storage.reselect': '重新上传',
@@ -229,7 +229,7 @@ final class XLabLocalization extends ChangeNotifier {
         'Uploading custom-mode reference image',
     'realtime.reference.prompt.retry': 'Retry custom-mode reference upload',
     'realtime.performance.limited':
-        'Device performance is limited. Realtime quality may decrease.',
+        'Network or device performance is limited. Realtime quality may decrease.',
     'realtime.loading': 'Loading realtime video',
     'storage.select': 'Select an image or video',
     'storage.reselect': 'Reselect',

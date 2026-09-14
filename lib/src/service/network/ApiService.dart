@@ -5,6 +5,7 @@ import 'dart:io';
 import '../../foundation/errors/ErrorMessageFormatter.dart';
 import '../../foundation/errors/ErrorNormalizer.dart';
 import '../../foundation/errors/XmaxError.dart';
+import '../../foundation/runtime/RuntimeInfo.dart';
 import '../../core/XmaxEnvironment.dart';
 import 'ApiLogger.dart';
 import 'ApiServicing.dart';
@@ -93,6 +94,7 @@ final class ApiService implements ApiServicing {
   }) async {
     _validateConfiguration();
     final url = _makeURL(path);
+    final runtime = await RuntimeInfo.resolve();
     final encodedBody = body == null ? null : utf8.encode(jsonEncode(body));
     final stopwatch = Stopwatch()..start();
 
@@ -106,6 +108,10 @@ final class ApiService implements ApiServicing {
           HttpHeaders.acceptHeader: ContentType.json.mimeType,
           HttpHeaders.contentTypeHeader: ContentType.json.mimeType,
           'X-Api-Key': _apiKey,
+          'X-Platform': runtime.platform,
+          'X-OS-Version': runtime.osVersion,
+          'X-SDK-Version': runtime.sdkVersion,
+          'X-Device-Model': runtime.deviceModel,
         },
         body: encodedBody,
         timeout: _timeout,

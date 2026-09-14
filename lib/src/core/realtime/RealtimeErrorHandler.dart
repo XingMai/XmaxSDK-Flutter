@@ -22,6 +22,17 @@ final class RealtimeErrorHandler {
 
   void _notify(XmaxError error) {
     try {
+      XmaxLogger.error(
+        category: XmaxLoggerCategory.realtime,
+        message:
+            '实时操作失败 (Realtime Operation Failed)\n'
+            '└─ 原因：${ErrorMessageFormatter.format(error)}',
+      );
+    } catch (_) {
+      // A diagnostic sink must not prevent delivery of the original error.
+    }
+
+    try {
       _listener?.call(error);
     } catch (listenerError) {
       try {

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import '../../foundation/errors/XmaxError.dart';
+import '../../foundation/logging/XmaxLogger.dart';
 import '../../foundation/media/camera/CameraPosition.dart';
 import '../../foundation/rtc/RtcManager.dart';
 import '../../media/MediaController.dart';
@@ -40,6 +41,7 @@ final class XmaxRealtimeManager implements XmaxRealtimeManaging {
       rtcManager: rtcManager,
       errorListener: errorHandler.forward,
       remoteStreamListener: renderController.setRemoteStream,
+      remoteFrameRenderedListener: renderController.markRemoteFrameRendered,
     );
 
     final mediaController = MediaController(
@@ -85,7 +87,11 @@ final class XmaxRealtimeManager implements XmaxRealtimeManaging {
        _streamController = streamController,
        _connectionManager = connectionManager,
        _generationManager = generationManager,
-       _errorHandler = errorHandler;
+       _errorHandler = errorHandler {
+    _mediaController.setCameraPreviewReadyListener(
+      _cameraPreviewDidBecomeReady,
+    );
+  }
 
   @override
   final RealtimeConfiguration options;
@@ -99,6 +105,7 @@ final class XmaxRealtimeManager implements XmaxRealtimeManaging {
     connectionState: RealtimeConnectionState.idle,
   );
   RealtimeStateListener? _stateListener;
+  RealtimeCameraPreviewReadyListener? _cameraPreviewReadyListener;
   int _operationVersion = 0;
   int _generationRequestVersion = 0;
   int _generationCancellationVersion = 0;
@@ -107,6 +114,7 @@ final class XmaxRealtimeManager implements XmaxRealtimeManaging {
   Completer<void>? _startingGenerationCompleter;
   Future<void>? _closeFuture;
   Future<void>? _disconnectFuture;
+  Future<RealtimeMediaStream>? _cameraCreationFuture;
 
   @override
   Future<RealtimeState> get currentState async => _state;
@@ -126,7 +134,10 @@ final class XmaxRealtimeManager implements XmaxRealtimeManaging {
   Future<void> setCameraPreviewReadyListener(
     RealtimeCameraPreviewReadyListener? listener,
   ) async {
-    _mediaController.setCameraPreviewReadyListener(listener);
+    _cameraPreviewReadyListener = listener;
+    if (_state.connectionState == RealtimeConnectionState.ready) {
+      listener?.call();
+    }
   }
 
   @override
@@ -169,6 +180,7 @@ final class XmaxRealtimeManager implements XmaxRealtimeManaging {
     CameraPosition position = CameraPosition.front,
   }) async {
     if (_connectionManager.currentSessionID.isNotEmpty ||
+        _state.connectionState == RealtimeConnectionState.preparing ||
         _state.connectionState == RealtimeConnectionState.connecting ||
         _state.connectionState == RealtimeConnectionState.disconnecting) {
       throw _report(
@@ -180,13 +192,46 @@ final class XmaxRealtimeManager implements XmaxRealtimeManaging {
       );
     }
 
-    try {
-      return await _mediaController.createLocalCameraStream(
-        videoFormat: videoFormat,
-        position: position,
+    if (_mediaController.currentTrack != null) {
+      throw _report(
+        const XmaxError(
+          code: XmaxErrorCode.invalidConfiguration,
+          message:
+              'Stop the current local media stream before creating another one',
+        ),
       );
+    }
+
+    final version = ++_operationVersion;
+    _emit(
+      const RealtimeState(connectionState: RealtimeConnectionState.preparing),
+    );
+
+    final creation = _mediaController.createLocalCameraStream(
+      videoFormat: videoFormat,
+      position: position,
+    );
+    _cameraCreationFuture = creation;
+
+    try {
+      final stream = await creation;
+      _ensureCurrent(version);
+      return stream;
     } catch (error) {
-      throw _report(error);
+      if (version != _operationVersion) throw XmaxError.from(error);
+
+      final xmaxError = _report(error);
+      _emit(
+        RealtimeState(
+          connectionState: RealtimeConnectionState.idle,
+          reason: RealtimeReason.failure(xmaxError),
+        ),
+      );
+      throw xmaxError;
+    } finally {
+      if (identical(_cameraCreationFuture, creation)) {
+        _cameraCreationFuture = null;
+      }
     }
   }
 
@@ -206,6 +251,7 @@ final class XmaxRealtimeManager implements XmaxRealtimeManaging {
 
     try {
       await _mediaController.stopLocalCameraStream();
+      _emit(const RealtimeState(connectionState: RealtimeConnectionState.idle));
     } catch (error) {
       throw _report(error);
     }
@@ -330,21 +376,27 @@ final class XmaxRealtimeManager implements XmaxRealtimeManaging {
 
       final xmaxError = _report(error);
       _emit(
-        const RealtimeState(connectionState: RealtimeConnectionState.error),
+        RealtimeState(
+          connectionState: _mediaController.currentTrack == null
+              ? RealtimeConnectionState.idle
+              : RealtimeConnectionState.ready,
+          reason: RealtimeReason.failure(xmaxError),
+        ),
       );
       throw xmaxError;
     }
   }
 
   @override
-  Future<void> disconnect() {
+  Future<void> disconnect({RealtimeReason reason = RealtimeReason.normal}) {
     final active = _disconnectFuture;
     if (active != null) {
       return active;
     }
 
     if (_state.connectionState == RealtimeConnectionState.idle ||
-        _state.connectionState == RealtimeConnectionState.disconnected) {
+        _state.connectionState == RealtimeConnectionState.preparing ||
+        _state.connectionState == RealtimeConnectionState.ready) {
       // A generation request may be queued but not have entered connect yet.
       _generationRequestVersion += 1;
       _generationCancellationVersion += 1;
@@ -352,16 +404,12 @@ final class XmaxRealtimeManager implements XmaxRealtimeManaging {
       return Future<void>.value();
     }
 
-    final future = _performDisconnect(
-      finalState: RealtimeConnectionState.disconnected,
-    );
+    final future = _performDisconnect(reason: reason);
     _disconnectFuture = future;
     return future.whenComplete(() => _disconnectFuture = null);
   }
 
-  Future<void> _performDisconnect({
-    required RealtimeConnectionState finalState,
-  }) async {
+  Future<void> _performDisconnect({required RealtimeReason reason}) async {
     // Invalidate pending connect/generation callbacks before cleanup starts.
     _operationVersion += 1;
     _generationRequestVersion += 1;
@@ -390,7 +438,15 @@ final class XmaxRealtimeManager implements XmaxRealtimeManaging {
       _report(error);
     }
 
-    _emit(RealtimeState(connectionState: finalState, sessionID: sessionID));
+    _emit(
+      RealtimeState(
+        connectionState: _mediaController.currentTrack == null
+            ? RealtimeConnectionState.idle
+            : RealtimeConnectionState.ready,
+        sessionID: sessionID,
+        reason: reason,
+      ),
+    );
   }
 
   @override
@@ -409,8 +465,22 @@ final class XmaxRealtimeManager implements XmaxRealtimeManaging {
     _operationVersion += 1;
     await disconnect();
 
+    // Let an in-flight camera creation finish before MediaController tears
+    // down its source; otherwise its operation guard would skip cleanup.
+    try {
+      await _cameraCreationFuture;
+    } catch (_) {
+      // The creator reports its own failure; close still owns final cleanup.
+    }
+
     try {
       await _mediaController.stopLocalStream();
+      _emit(
+        const RealtimeState(
+          connectionState: RealtimeConnectionState.idle,
+          reason: RealtimeReason.normal,
+        ),
+      );
     } catch (error) {
       _report(error);
     }
@@ -685,12 +755,32 @@ final class XmaxRealtimeManager implements XmaxRealtimeManaging {
       return;
     }
 
-    _report(error);
-    await _performDisconnect(finalState: RealtimeConnectionState.error);
+    final xmaxError = _report(error);
+    await _performDisconnect(reason: RealtimeReason.failure(xmaxError));
+  }
+
+  void _cameraPreviewDidBecomeReady() {
+    if (_mediaController.currentTrack == null) return;
+
+    if (_state.connectionState == RealtimeConnectionState.preparing) {
+      _emit(
+        const RealtimeState(connectionState: RealtimeConnectionState.ready),
+      );
+    }
+    _cameraPreviewReadyListener?.call();
   }
 
   void _emit(RealtimeState state) {
+    final previous = _state.connectionState;
     _state = state;
+    if (previous != state.connectionState) {
+      XmaxLogger.debug(
+        category: XmaxLoggerCategory.realtime,
+        message:
+            '实时状态 (Realtime State)\n'
+            '└─ ${previous.name} → ${state.connectionState.name}',
+      );
+    }
     _stateListener?.call(state);
   }
 

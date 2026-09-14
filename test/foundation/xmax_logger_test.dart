@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xmax_sdk/src/foundation/logging/XmaxLogger.dart';
 import 'package:xmax_sdk/src/foundation/logging/XmaxLoggerOption.dart';
@@ -56,5 +57,37 @@ void main() {
     XmaxLogger.error(message: 'Error');
 
     expect(records.map((record) => record.level), XmaxLogLevel.values);
+  });
+
+  test('default sink writes enabled SDK logs to the native console', () {
+    final originalDebugPrint = debugPrint;
+    final console = <String?>[];
+    debugPrint = (String? message, {int? wrapWidth}) => console.add(message);
+    addTearDown(() => debugPrint = originalDebugPrint);
+    XmaxLogger.reset();
+
+    XmaxLogger.error(message: 'disabled');
+    expect(console, isEmpty);
+
+    XmaxLogger.configure(options: XmaxLoggerOption.business);
+    XmaxLogger.error(
+      category: XmaxLoggerCategory.realtime,
+      message: 'Generation failed\nReason: timeout',
+    );
+    XmaxLogger.debug(
+      message: 'hidden stats',
+      option: XmaxLoggerOption.performance,
+    );
+    expect(console, <String>[
+      '[Xmax][Realtime] Generation failed\n[Xmax][Realtime] Reason: timeout',
+    ]);
+
+    XmaxLogger.configure(options: XmaxLoggerOption.all);
+    XmaxLogger.debug(
+      category: XmaxLoggerCategory.rtc,
+      message: 'Performance stats',
+      option: XmaxLoggerOption.performance,
+    );
+    expect(console.last, '[Xmax][RTC] Performance stats');
   });
 }

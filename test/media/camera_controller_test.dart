@@ -7,6 +7,8 @@ import 'package:xmax_sdk/src/foundation/rtc/RtcEventListener.dart';
 import 'package:xmax_sdk/src/foundation/rtc/RtcManaging.dart';
 import 'package:xmax_sdk/src/foundation/rtc/RtcModels.dart';
 import 'package:xmax_sdk/src/media/camera/CameraController.dart';
+import 'package:xmax_sdk/src/render/video/VideoRenderBinding.dart';
+import 'package:xmax_sdk/src/render/video/VideoRenderRegistry.dart';
 import 'package:xmax_sdk/src/service/media/MediaServicing.dart';
 import 'package:xmax_sdk/src/service/media/MediaService.dart';
 import 'package:xmax_sdk/src/service/realtime/RealtimeVideoFormat.dart';
@@ -28,6 +30,8 @@ void main() {
       position: CameraPosition.front,
     );
     rtc.notifyPreviewReady();
+    expect(readyCount, 0);
+    _attachPreview(camera);
     expect(readyCount, 1);
 
     await camera.stopLocalCameraStream();
@@ -38,11 +42,60 @@ void main() {
       videoFormat: const RealtimeVideoFormat(width: 832, height: 1472, fps: 24),
       position: CameraPosition.front,
     );
+    _attachPreview(camera);
+    expect(readyCount, 1);
     rtc.notifyPreviewReady();
 
     expect(readyCount, 2);
     await camera.stopLocalCameraStream();
   });
+
+  test(
+    'stale capture and preview callbacks cannot ready a new camera',
+    () async {
+      final rtc = _FakeRtc();
+      final camera = CameraController(
+        rtcManager: rtc,
+        permissionManager: const _AllowedPermissions(),
+        mediaService: const _IdentityMediaService(),
+      );
+      var readyCount = 0;
+      camera.setPreviewReadyListener(() => readyCount += 1);
+
+      await camera.createLocalCameraStream(
+        videoFormat: const RealtimeVideoFormat(
+          width: 832,
+          height: 1472,
+          fps: 30,
+        ),
+        position: CameraPosition.front,
+      );
+      final oldCapture = rtc.previewReadyListener;
+      final oldBinding =
+          VideoRenderRegistry.handleFor(camera.currentTrack!)!.value
+              as LocalVideoRenderBinding;
+      await camera.stopLocalCameraStream();
+
+      await camera.createLocalCameraStream(
+        videoFormat: const RealtimeVideoFormat(
+          width: 832,
+          height: 1472,
+          fps: 30,
+        ),
+        position: CameraPosition.front,
+      );
+      oldCapture?.call();
+      oldBinding.onPreviewAttached?.call();
+      expect(readyCount, 0);
+
+      rtc.notifyPreviewReady();
+      _attachPreview(camera);
+      expect(readyCount, 1);
+      _attachPreview(camera);
+      expect(readyCount, 1);
+      await camera.stopLocalCameraStream();
+    },
+  );
 
   test(
     'camera switch normalizes RTC failures and preserves position',
@@ -125,39 +178,49 @@ void main() {
     expect(rtc.lastCaptureSize, isNull);
   });
 
-  test('camera resize preserves bitrate bounds and encoder preference', () async {
-    final rtc = _FakeRtc();
-    final camera = CameraController(
-      rtcManager: rtc,
-      permissionManager: const _AllowedPermissions(),
-      mediaService: const _ResizingMediaService(),
-    );
+  test(
+    'camera resize preserves bitrate bounds and encoder preference',
+    () async {
+      final rtc = _FakeRtc();
+      final camera = CameraController(
+        rtcManager: rtc,
+        permissionManager: const _AllowedPermissions(),
+        mediaService: const _ResizingMediaService(),
+      );
 
-    final stream = await camera.createLocalCameraStream(
-      videoFormat: const RealtimeVideoFormat(
-        width: 832,
-        height: 1472,
-        fps: 30,
-        minimumBitrate: 900,
-        maximumBitrate: 3000,
-        encoderPreference: RealtimeVideoEncoderPreference.maintainFramerate,
-      ),
-      position: CameraPosition.front,
-    );
+      final stream = await camera.createLocalCameraStream(
+        videoFormat: const RealtimeVideoFormat(
+          width: 832,
+          height: 1472,
+          fps: 30,
+          minimumBitrate: 900,
+          maximumBitrate: 3000,
+          encoderPreference: RealtimeVideoEncoderPreference.maintainFramerate,
+        ),
+        position: CameraPosition.front,
+      );
 
-    expect(
-      stream.videoTrack?.videoFormat,
-      const RealtimeVideoFormat(
-        width: 800,
-        height: 1408,
-        fps: 30,
-        minimumBitrate: 900,
-        maximumBitrate: 3000,
-        encoderPreference: RealtimeVideoEncoderPreference.maintainFramerate,
-      ),
-    );
-    await camera.stopLocalCameraStream();
-  });
+      expect(
+        stream.videoTrack?.videoFormat,
+        const RealtimeVideoFormat(
+          width: 800,
+          height: 1408,
+          fps: 30,
+          minimumBitrate: 900,
+          maximumBitrate: 3000,
+          encoderPreference: RealtimeVideoEncoderPreference.maintainFramerate,
+        ),
+      );
+      await camera.stopLocalCameraStream();
+    },
+  );
+}
+
+void _attachPreview(CameraController camera) {
+  final binding =
+      VideoRenderRegistry.handleFor(camera.currentTrack!)!.value
+          as LocalVideoRenderBinding;
+  binding.onPreviewAttached?.call();
 }
 
 final class _AllowedPermissions implements PermissionManaging {

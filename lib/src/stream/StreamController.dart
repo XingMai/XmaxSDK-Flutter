@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:ui';
 
 import '../foundation/errors/XmaxError.dart';
 import '../foundation/logging/XmaxLogger.dart';
@@ -22,6 +23,7 @@ import 'room/RoomControlling.dart';
 import 'StreamControlling.dart';
 
 typedef RemoteStreamListener = void Function(RemoteStream? stream);
+typedef RemoteFrameRenderedListener = void Function(RemoteStream stream);
 
 final class StreamController implements StreamControlling {
   StreamController({
@@ -31,6 +33,7 @@ final class StreamController implements StreamControlling {
     QualityControlling? qualityController,
     RealtimeErrorListener? errorListener,
     RemoteStreamListener? remoteStreamListener,
+    RemoteFrameRenderedListener? remoteFrameRenderedListener,
     this.generationTimeout = const Duration(seconds: 15),
   }) : _rtcManager = rtcManager,
        _roomController =
@@ -39,10 +42,12 @@ final class StreamController implements StreamControlling {
            encodingController ?? EncodingController(rtcManager: rtcManager),
        _qualityController = qualityController ?? QualityController(),
        _errorListener = errorListener,
-       _remoteStreamListener = remoteStreamListener {
+       _remoteStreamListener = remoteStreamListener,
+       _remoteFrameRenderedListener = remoteFrameRenderedListener {
     rtcManager.setEventListener(
       RtcEventListener(
         onRemoteVideoPublished: _onRemoteVideoPublished,
+        onFirstRemoteVideoFrameRendered: _onFirstRemoteVideoFrameRendered,
         onRemoteAudioPublished: _onRemoteAudioPublished,
         onSEIMessageReceived: _onSEIMessageReceived,
         onError: _onError,
@@ -58,12 +63,14 @@ final class StreamController implements StreamControlling {
   final QualityControlling _qualityController;
   final RealtimeErrorListener? _errorListener;
   final RemoteStreamListener? _remoteStreamListener;
+  final RemoteFrameRenderedListener? _remoteFrameRenderedListener;
   final Duration generationTimeout;
 
   String _roomID = '';
   String _botName = '';
   bool _localVideoPublished = false;
   final Set<String> _remoteVideoSubscriptions = <String>{};
+  final Set<(String, String, String)> _renderedRemoteStreams = {};
   final Map<String, String> _publishedRemoteAudioStreams = <String, String>{};
   RemoteStream? _activeRemoteStream;
   String? _subscribedRemoteAudioStreamID;
@@ -73,6 +80,8 @@ final class StreamController implements StreamControlling {
   String? _generationTaskID;
   Completer<void>? _generationCompleter;
   Timer? _generationTimer;
+  int _receivedGenerationSeiCount = 0;
+  int _expectedRemoteSeiCount = 0;
 
   @override
   bool get hasGenerationTask => _generationTaskID != null;
@@ -181,6 +190,7 @@ final class StreamController implements StreamControlling {
     required void Function() ensureActive,
   }) async {
     // Existing remote streams may be reported while join() is still pending.
+    _renderedRemoteStreams.clear();
     _roomID = connection.roomID.trim();
     _botName = connection.botName?.trim() ?? '';
     try {
@@ -196,6 +206,7 @@ final class StreamController implements StreamControlling {
       _roomID = '';
       _botName = '';
       _publishedRemoteAudioStreams.clear();
+      _renderedRemoteStreams.clear();
       rethrow;
     }
   }
@@ -223,6 +234,7 @@ final class StreamController implements StreamControlling {
     }
 
     _remoteVideoSubscriptions.clear();
+    _renderedRemoteStreams.clear();
     _publishedRemoteAudioStreams.clear();
     _localVideoPublished = false;
     _roomID = '';
@@ -236,6 +248,7 @@ final class StreamController implements StreamControlling {
     required String taskID,
     required RealtimeVideoFormat videoFormat,
     required RealtimeContext context,
+    Size? targetSize,
   }) async {
     if (taskID.trim().isEmpty) {
       throw const XmaxError(
@@ -265,7 +278,20 @@ final class StreamController implements StreamControlling {
     completer.future.ignore();
     _generationTaskID = taskID;
     _generationCompleter = completer;
+    _receivedGenerationSeiCount = 0;
+    _expectedRemoteSeiCount = 0;
     _generationTimer = Timer(generationTimeout, () {
+      // Keep the handshake evidence even when XLab later displays an RTC
+      // quality warning. Never include the prompt, credentials or SEI payload.
+      XmaxLogger.warn(
+        category: XmaxLoggerCategory.stream,
+        message:
+            '生成确认超时 (Generation Confirmation Timed Out)\n'
+            '├─ taskID：$taskID\n'
+            '├─ 视频订阅数：${_remoteVideoSubscriptions.length}\n'
+            '├─ 收到 SEI：$_receivedGenerationSeiCount\n'
+            '└─ 来自目标远端的 SEI：$_expectedRemoteSeiCount',
+      );
       _rejectGeneration(
         const XmaxError(
           code: XmaxErrorCode.timeout,
@@ -279,6 +305,7 @@ final class StreamController implements StreamControlling {
         taskID: taskID,
         videoFormat: videoFormat,
         context: context,
+        targetSize: targetSize,
       );
       return GenerationStartConfirmation(
         value: completer.future,
@@ -315,10 +342,23 @@ final class StreamController implements StreamControlling {
     required String taskID,
     required RealtimeVideoFormat videoFormat,
     required RealtimeContext context,
+    Size? targetSize,
   }) => _roomController.changeGenerationCondition(
     taskID: taskID,
     videoFormat: videoFormat,
     context: context,
+    targetSize: targetSize,
+  );
+
+  @override
+  Future<void> changeTargetSize({
+    required String taskID,
+    required Size targetSize,
+    required void Function() ensureActive,
+  }) => _roomController.changeTargetSize(
+    taskID: taskID,
+    targetSize: targetSize,
+    ensureActive: ensureActive,
   );
 
   @override
@@ -350,12 +390,35 @@ final class StreamController implements StreamControlling {
       }
     } else {
       _remoteVideoSubscriptions.remove(stream.streamID);
+      _renderedRemoteStreams.remove((
+        stream.roomID,
+        stream.userID,
+        stream.streamID,
+      ));
       if (_activeRemoteStream?.streamID == stream.streamID) {
         _activeRemoteStream = null;
         unawaited(_deactivateRemoteAudio());
         _clearRemoteStream();
       }
     }
+  }
+
+  void _onFirstRemoteVideoFrameRendered(RemoteStream stream) {
+    if (!_isExpectedRemote(stream)) return;
+
+    // RTC reports the first frame per subscription, not per generation task.
+    // It may arrive before the SEI selects a stream, so retain this evidence
+    // until unpublish/disconnect and replay it only after a matching task SEI.
+    _renderedRemoteStreams.add((stream.roomID, stream.userID, stream.streamID));
+    final active = _activeRemoteStream;
+    if (active == null ||
+        active.roomID != stream.roomID ||
+        active.userID != stream.userID ||
+        active.streamID != stream.streamID) {
+      return;
+    }
+
+    _remoteFrameRenderedListener?.call(stream);
   }
 
   void _onRemoteAudioPublished(RemoteStream stream, bool published) {
@@ -409,6 +472,10 @@ final class StreamController implements StreamControlling {
       return;
     }
 
+    _receivedGenerationSeiCount += 1;
+    final expectedRemote = _isExpectedRemote(stream);
+    if (expectedRemote) _expectedRemoteSeiCount += 1;
+
     final String message;
     try {
       message = utf8.decode(bytes).trim();
@@ -421,12 +488,37 @@ final class StreamController implements StreamControlling {
       );
       return;
     }
-    if (message != taskID || !_isExpectedRemote(stream)) {
+    // Match iOS: os/index query parameters describe a frame, not its task.
+    // Compare the complete base ID, while retaining the room/bot identity check.
+    final receivedID = message.split('?').first;
+    final currentID = taskID.split('?').first;
+    final matchesTask = receivedID.isNotEmpty && receivedID == currentID;
+    if (!matchesTask || !expectedRemote) {
+      if (_receivedGenerationSeiCount == 1) {
+        XmaxLogger.debug(
+          category: XmaxLoggerCategory.stream,
+          message:
+              '忽略不匹配的生成 SEI (Ignored Generation SEI)\n'
+              '├─ task 匹配：$matchesTask\n'
+              '└─ room/bot 匹配：$expectedRemote',
+        );
+      }
       return;
     }
 
+    XmaxLogger.debug(
+      category: XmaxLoggerCategory.stream,
+      message: '生成 SEI 确认成功 (Generation SEI Confirmed)\n└─ taskID：$taskID',
+    );
     _activeRemoteStream = stream;
     _remoteStreamListener?.call(stream);
+    if (_renderedRemoteStreams.contains((
+      stream.roomID,
+      stream.userID,
+      stream.streamID,
+    ))) {
+      _remoteFrameRenderedListener?.call(stream);
+    }
     _generationTimer?.cancel();
     _generationTimer = null;
     _generationCompleter = null;

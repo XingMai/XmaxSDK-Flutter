@@ -1,8 +1,8 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:xmax_sdk/xmax_sdk.dart';
 
 import '../../localization/xlab_localization.dart';
@@ -154,6 +154,13 @@ class _RealtimePageState extends State<RealtimePage>
       if (!mounted || _isSuspendedForBackground) return;
       setState(() {
         _state = state;
+        if (state.connectionState == RealtimeConnectionState.preparing ||
+            state.connectionState == RealtimeConnectionState.idle) {
+          _cameraReady = false;
+        } else if (state.connectionState == RealtimeConnectionState.ready) {
+          _cameraReady = true;
+          _isLoading = false;
+        }
         if (_isCameraSwitchWaitingForGeneration &&
             state.connectionState == RealtimeConnectionState.generating) {
           _isCameraSwitchWaitingForGeneration = false;
@@ -170,17 +177,10 @@ class _RealtimePageState extends State<RealtimePage>
       if (!mounted || _isSuspendedForBackground) return;
       setState(() => _lastError = error);
     });
-    _manager.setCameraPreviewReadyListener(() {
-      if (mounted && !_isSuspendedForBackground) {
-        setState(() {
-          _cameraReady = true;
-          _isLoading = false;
-        });
-      }
-    });
     _manager.setPerformanceAlarmListener((alarm) {
       if (mounted &&
           !_isSuspendedForBackground &&
+          _lastError == null &&
           alarm.status == RealtimePerformanceStatus.limited) {
         setState(() {
           _lastError = XmaxError(
@@ -361,14 +361,12 @@ class _RealtimePageState extends State<RealtimePage>
 
     if (forPrompt && _handlePromptReferenceAction()) return;
 
-    final images = XTypeGroup(
-      label: XLabLocalization.shared.text('realtime.reference.label'),
-      extensions: <String>['jpg', 'jpeg', 'png', 'webp'],
-      uniformTypeIdentifiers: <String>['public.image'],
-      mimeTypes: <String>['image/*'],
-    );
     try {
-      final file = await openFile(acceptedTypeGroups: <XTypeGroup>[images]);
+      // Reference images come from Photos, matching the native iOS XLab.
+      final file = await ImagePicker().pickImage(
+        source: ImageSource.gallery,
+        requestFullMetadata: false,
+      );
       if (file == null || !mounted) return;
 
       final bytes = await file.readAsBytes();
@@ -609,7 +607,6 @@ class _RealtimePageState extends State<RealtimePage>
     WidgetsBinding.instance.removeObserver(this);
     _manager.setStateListener(null);
     _manager.setErrorListener(null);
-    _manager.setCameraPreviewReadyListener(null);
     _manager.setPerformanceAlarmListener(null);
     unawaited(_manager.close());
     _promptController.removeListener(_promptDidChange);

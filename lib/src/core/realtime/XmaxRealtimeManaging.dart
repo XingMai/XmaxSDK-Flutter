@@ -27,7 +27,8 @@ abstract interface class XmaxRealtimeManaging {
 
   /// 设置摄像头预览就绪监听器。
   ///
-  /// 本地摄像头首帧可用时回调；传入 `null` 时清除监听器。
+  /// 本地摄像头首帧可用且预览视图已挂载时回调；传入 `null` 时清除监听器。
+  /// 接入方也可通过 [setStateListener] 观察 `ready` 状态。
   Future<void> setCameraPreviewReadyListener(
     RealtimeCameraPreviewReadyListener? listener,
   );
@@ -87,7 +88,9 @@ abstract interface class XmaxRealtimeManaging {
   });
 
   /// 断开实时连接并保留当前本地摄像头预览。
-  Future<void> disconnect();
+  ///
+  /// [reason] 会记录在最终的 [RealtimeState] 中，默认是主动断开。
+  Future<void> disconnect({RealtimeReason reason = RealtimeReason.normal});
 
   /// 关闭当前实时生命周期并释放连接、本地媒体和 RTC 资源。
   ///

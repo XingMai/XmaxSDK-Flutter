@@ -44,6 +44,10 @@ final class XmaxRealtimeVideoView extends StatefulWidget {
 }
 
 final class _XmaxRealtimeVideoViewState extends State<XmaxRealtimeVideoView> {
+  // Flutter quantizes opacity to an 8-bit alpha. Values such as 0.001 round
+  // to zero and skip painting the RTC platform view entirely.
+  static const _pendingRemoteOpacity = 1 / 255;
+
   VideoRenderHandle? _remoteHandle;
   bool _isRemoteVisible = false;
 
@@ -82,8 +86,18 @@ final class _XmaxRealtimeVideoViewState extends State<XmaxRealtimeVideoView> {
       if (widget.remoteTrack != null)
         IgnorePointer(
           ignoring: !_isRemoteVisible,
-          child: Opacity(
-            opacity: _isRemoteVisible ? 1 : 0,
+          child: TweenAnimationBuilder<double>(
+            // Keep a nonzero composited alpha while waiting for the native
+            // first-frame callback, then fade in over the retained preview.
+            tween: Tween<double>(
+              end: _isRemoteVisible ? 1 : _pendingRemoteOpacity,
+            ),
+            duration: _isRemoteVisible
+                ? const Duration(milliseconds: 300)
+                : Duration.zero,
+            curve: Curves.easeInOut,
+            builder: (context, opacity, child) =>
+                Opacity(opacity: opacity, child: child),
             child: XmaxVideoView(
               track: widget.remoteTrack,
               videoContentMode: widget.videoContentMode,
@@ -122,6 +136,6 @@ final class _XmaxRealtimeVideoViewState extends State<XmaxRealtimeVideoView> {
 
   bool get _hasRemoteBinding {
     final binding = _remoteHandle?.value;
-    return binding is RemoteVideoRenderBinding;
+    return binding is RemoteVideoRenderBinding && binding.firstFrameRendered;
   }
 }

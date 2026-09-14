@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:ui';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xmax_sdk/src/foundation/errors/XmaxError.dart';
@@ -7,6 +8,7 @@ import 'package:xmax_sdk/src/foundation/media/camera/CameraPosition.dart';
 import 'package:xmax_sdk/src/foundation/rtc/RtcEventListener.dart';
 import 'package:xmax_sdk/src/foundation/rtc/RtcManaging.dart';
 import 'package:xmax_sdk/src/foundation/rtc/RtcModels.dart';
+import 'package:xmax_sdk/src/foundation/runtime/RuntimeInfo.dart';
 import 'package:xmax_sdk/src/service/realtime/RealtimeContext.dart';
 import 'package:xmax_sdk/src/service/realtime/RealtimeNetworkQuality.dart';
 import 'package:xmax_sdk/src/service/realtime/RealtimePerformanceAlarm.dart';
@@ -19,47 +21,170 @@ import 'package:xmax_sdk/src/stream/quality/QualityControlling.dart';
 import 'package:xmax_sdk/src/stream/room/RoomControlling.dart';
 
 void main() {
-  test('matching SEI selects the remote renderer', () async {
-    final rtc = _FakeRtc();
-    final renderedStreams = <RemoteStream?>[];
-    final controller = StreamController(
-      rtcManager: rtc,
-      roomController: _FakeRoom(),
-      encodingController: _FakeEncoding(),
-      qualityController: _FakeQuality(),
-      remoteStreamListener: renderedStreams.add,
-    );
+  test(
+    'SEI replays an early first frame and retains it until unpublish',
+    () async {
+      final rtc = _FakeRtc();
+      final renderedStreams = <RemoteStream?>[];
+      final renderedFrames = <RemoteStream>[];
+      final controller = StreamController(
+        rtcManager: rtc,
+        roomController: _FakeRoom(),
+        encodingController: _FakeEncoding(),
+        qualityController: _FakeQuality(),
+        remoteStreamListener: renderedStreams.add,
+        remoteFrameRenderedListener: renderedFrames.add,
+      );
 
-    await controller.connect(
-      connection: const RealtimeSessionConnection(
+      await controller.connect(
+        connection: const RealtimeSessionConnection(
+          roomID: 'room',
+          userID: 'local-user',
+          token: 'token',
+          botName: 'bot',
+        ),
+        ensureActive: () {},
+      );
+
+      const remote = RemoteStream(
         roomID: 'room',
-        userID: 'local-user',
-        token: 'token',
-        botName: 'bot',
-      ),
-      ensureActive: () {},
-    );
+        userID: 'bot',
+        streamID: 'bot-stream',
+      );
+      rtc.listener!.onRemoteVideoPublished!(remote, true);
+      rtc.listener!.onFirstRemoteVideoFrameRendered!(remote);
 
-    const remote = RemoteStream(
-      roomID: 'room',
-      userID: 'bot',
-      streamID: 'bot-stream',
-    );
-    rtc.listener!.onRemoteVideoPublished!(remote, true);
+      expect(renderedStreams, isEmpty);
+      expect(renderedFrames, isEmpty);
 
-    expect(renderedStreams, isEmpty);
+      final generation = await controller.beginGeneration(
+        taskID: 'task-1',
+        videoFormat: const RealtimeVideoFormat(
+          width: 832,
+          height: 1472,
+          fps: 24,
+        ),
+        context: RealtimeContext(prompt: 'animate'),
+      );
+      rtc.listener!.onSEIMessageReceived!(remote, utf8.encode('task-1'));
+      await generation.value;
 
-    final generation = await controller.beginGeneration(
-      taskID: 'task-1',
-      videoFormat: const RealtimeVideoFormat(width: 832, height: 1472, fps: 24),
-      context: RealtimeContext(prompt: 'animate'),
-    );
-    rtc.listener!.onSEIMessageReceived!(remote, utf8.encode('task-1'));
-    await generation.value;
+      // RTC can render before the generation SEI arrives. Replaying that first
+      // frame must reveal the selected stream without waiting for a second event.
+      expect(renderedStreams, <RemoteStream?>[remote]);
+      expect(renderedFrames, <RemoteStream>[remote]);
 
-    // Matching SEI selects the renderer and acknowledges generation directly.
-    expect(renderedStreams, <RemoteStream?>[remote]);
-  });
+      // A new task in the same subscription does not trigger another RTC first
+      // frame callback, but must still wait for its own SEI before being shown.
+      await controller.stopGeneration(taskID: 'task-1');
+      final next = await controller.beginGeneration(
+        taskID: 'task-2',
+        videoFormat: const RealtimeVideoFormat(
+          width: 832,
+          height: 1472,
+          fps: 30,
+        ),
+        context: RealtimeContext(prompt: 'next'),
+      );
+      expect(renderedFrames, hasLength(1));
+      rtc.listener!.onSEIMessageReceived!(remote, utf8.encode('task-2'));
+      await next.value;
+      expect(renderedFrames, <RemoteStream>[remote, remote]);
+
+      // Once unpublished, the stream must prove it has a new rendered frame.
+      rtc.listener!.onRemoteVideoPublished!(remote, false);
+      await controller.stopGeneration(taskID: 'task-2');
+      rtc.listener!.onRemoteVideoPublished!(remote, true);
+      final republished = await controller.beginGeneration(
+        taskID: 'task-3',
+        videoFormat: const RealtimeVideoFormat(
+          width: 832,
+          height: 1472,
+          fps: 30,
+        ),
+        context: RealtimeContext(prompt: 'republished'),
+      );
+      rtc.listener!.onSEIMessageReceived!(remote, utf8.encode('task-3'));
+      await republished.value;
+      expect(renderedFrames, hasLength(2));
+      rtc.listener!.onFirstRemoteVideoFrameRendered!(remote);
+      expect(renderedFrames, <RemoteStream>[remote, remote, remote]);
+      await controller.disconnect();
+    },
+  );
+
+  for (final taskID in <String>[
+    'task-1',
+    'task-1?os=ios',
+    'task-1?os=flutter-ios',
+    'task-1?os=flutter-android',
+  ]) {
+    for (final message in <String>[
+      'task-1',
+      ' task-1?os=ios&index=0 ',
+      'task-1?index=12',
+      'task-1?os=flutter-ios&index=0',
+      'task-1?os=flutter-android&index=12',
+    ]) {
+      test('generation matches base task ID: $taskID / $message', () async {
+        final rtc = _FakeRtc();
+        final renderedStreams = <RemoteStream?>[];
+        final controller = StreamController(
+          rtcManager: rtc,
+          roomController: _FakeRoom(),
+          remoteStreamListener: renderedStreams.add,
+        );
+        addTearDown(controller.disconnect);
+        await controller.connect(
+          connection: const RealtimeSessionConnection(
+            roomID: 'room',
+            userID: 'local-user',
+            token: 'token',
+            botName: 'bot',
+          ),
+          ensureActive: () {},
+        );
+        final generation = await controller.beginGeneration(
+          taskID: taskID,
+          videoFormat: const RealtimeVideoFormat(
+            width: 832,
+            height: 1472,
+            fps: 30,
+          ),
+          context: RealtimeContext(prompt: 'animate'),
+        );
+        const remote = RemoteStream(
+          roomID: 'room',
+          userID: 'bot',
+          streamID: 'bot-stream',
+        );
+
+        // Query compatibility must not accept another task, room or publisher.
+        for (final invalid in <String>['task-10?index=0', '?index=0']) {
+          rtc.listener!.onSEIMessageReceived!(remote, utf8.encode(invalid));
+        }
+        for (final unrelated in <RemoteStream>[
+          const RemoteStream(
+            roomID: 'other-room',
+            userID: 'bot',
+            streamID: 'bot-stream',
+          ),
+          const RemoteStream(
+            roomID: 'room',
+            userID: 'other-user',
+            streamID: 'other-stream',
+          ),
+        ]) {
+          rtc.listener!.onSEIMessageReceived!(unrelated, utf8.encode(message));
+        }
+        expect(renderedStreams, isEmpty);
+
+        rtc.listener!.onSEIMessageReceived!(remote, utf8.encode(message));
+        await generation.value;
+        expect(renderedStreams, <RemoteStream?>[remote]);
+      });
+    }
+  }
 
   test('remote audio uses the saved volume and unsubscribes on stop', () async {
     final rtc = _FakeRtc();
@@ -394,16 +519,80 @@ void main() {
       expect(reportedErrors.single.code, XmaxErrorCode.internalError);
     },
   );
+
+  test('target size change reaches the joined RTC room', () async {
+    final rtc = _FakeRtc();
+    final controller = StreamController(rtcManager: rtc);
+    await controller.connect(
+      connection: const RealtimeSessionConnection(
+        roomID: 'room',
+        userID: 'local-user',
+        token: 'token',
+      ),
+      ensureActive: () {},
+    );
+
+    await controller.changeTargetSize(
+      taskID: 'task-1',
+      targetSize: const Size(1280, 720),
+      ensureActive: () {},
+    );
+    final event = jsonDecode(rtc.roomMessages.single) as Map<String, dynamic>;
+    expect(event['event'], 'change_target_size');
+    expect(event['params'], <String, Object?>{
+      'target_size': <int>[1280, 720],
+    });
+    expect(event['user_id'], 'local-user');
+    expect(event['uid'], 'task-1');
+    expect(event['runtime'], isA<Map<String, dynamic>>());
+    expect(event['runtime'], (await RuntimeInfo.resolve()).toJson());
+
+    await expectLater(
+      () => controller.changeTargetSize(
+        taskID: 'task-1',
+        targetSize: const Size(1920, 1080),
+        ensureActive: () => throw StateError('stale operation'),
+      ),
+      throwsA(isA<StateError>()),
+    );
+    expect(rtc.roomMessages, hasLength(1));
+    await controller.disconnect();
+  });
+
+  test('RTC room signaling failure is normalized like iOS', () async {
+    final rtc = _FakeRtc(roomMessageError: StateError('send failed'));
+    final controller = StreamController(rtcManager: rtc);
+    await controller.connect(
+      connection: const RealtimeSessionConnection(
+        roomID: 'room',
+        userID: 'local-user',
+        token: 'token',
+      ),
+      ensureActive: () {},
+    );
+
+    await expectLater(
+      controller.changeTargetSize(
+        taskID: 'task-1',
+        targetSize: const Size(1280, 720),
+        ensureActive: () {},
+      ),
+      throwsA(isA<XmaxError>()),
+    );
+    await controller.disconnect();
+  });
 }
 
 final class _FakeRtc implements RtcManaging {
-  _FakeRtc({this.subscribeRemoteVideoError});
+  _FakeRtc({this.subscribeRemoteVideoError, this.roomMessageError});
 
   final Object? subscribeRemoteVideoError;
+  final Object? roomMessageError;
   RtcEventListener? listener;
   Completer<void>? audioSubscribeGate;
   final List<(String, bool)> audioSubscriptions = <(String, bool)>[];
   final List<(String, int)> audioVolumes = <(String, int)>[];
+  final List<String> roomMessages = <String>[];
 
   @override
   void setEventListener(RtcEventListener? listener) => this.listener = listener;
@@ -457,7 +646,10 @@ final class _FakeRtc implements RtcManaging {
   Future<void> leaveRoom() async {}
 
   @override
-  Future<void> sendRoomMessage(String message) async {}
+  Future<void> sendRoomMessage(String message) async {
+    if (roomMessageError case final error?) throw error;
+    roomMessages.add(message);
+  }
 
   @override
   void setCameraPreviewReadyListener(void Function()? listener) {}
@@ -486,7 +678,15 @@ final class _FakeRoom implements RoomControlling {
     required String taskID,
     required RealtimeVideoFormat videoFormat,
     required RealtimeContext context,
+    Size? targetSize,
   }) async {}
+
+  @override
+  Future<void> changeTargetSize({
+    required String taskID,
+    required Size targetSize,
+    required void Function() ensureActive,
+  }) async => ensureActive();
 
   @override
   Future<void> join({
@@ -508,6 +708,7 @@ final class _FakeRoom implements RoomControlling {
     required String taskID,
     required RealtimeVideoFormat videoFormat,
     required RealtimeContext context,
+    Size? targetSize,
   }) async {
     final error = startError;
     if (error != null) {

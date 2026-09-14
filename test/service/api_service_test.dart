@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:xmax_sdk/src/foundation/runtime/RuntimeInfo.dart';
 import 'package:xmax_sdk/src/service/network/ApiService.dart';
 import 'package:xmax_sdk/src/service/network/ApiServicing.dart';
 import 'package:xmax_sdk/xmax_sdk.dart';
@@ -24,6 +25,11 @@ void main() {
 
     expect(result['id'], 'session-1');
     expect(transport.headers?['X-Api-Key'], 'key');
+    final runtime = await RuntimeInfo.resolve();
+    expect(transport.headers?['X-Platform'], runtime.platform);
+    expect(transport.headers?['X-OS-Version'], runtime.osVersion);
+    expect(transport.headers?['X-SDK-Version'], runtime.sdkVersion);
+    expect(transport.headers?['X-Device-Model'], runtime.deviceModel);
     expect(transport.url.toString(), '${ApiService.defaultBaseURL}/session');
     expect(utf8.decode(transport.body!), '{"model":"x2.0"}');
   });

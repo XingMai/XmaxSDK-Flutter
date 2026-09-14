@@ -498,9 +498,9 @@ input stream or starting generation.
 
 | Listener | Purpose |
 | --- | --- |
-| `setStateListener` | Observe pipeline states during real-time generation. |
+| `setStateListener` | Observe `idle → preparing → ready → connecting → connected → generating` and any failure reason. `ready` follows the first camera frame and mounted preview. |
 | `setErrorListener` | Handle fatal errors that prevent the realtime workflow from continuing. |
-| `setCameraPreviewReadyListener` | Be notified when the initial local camera frame is ready for preview rendering. |
+| `setCameraPreviewReadyListener` | Optional callback when the first camera frame and preview are ready; `setStateListener` also reports `ready`. |
 | `setNetworkQualityListener` | Monitor uplink and downlink network quality. |
 | `setPerformanceAlarmListener` | Detect device performance limitations or recovery, with a suggested video format when available. |
 

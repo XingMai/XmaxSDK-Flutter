@@ -103,7 +103,10 @@ abstract final class RtcStatsLogger {
     SourceWantedData data,
   ) {
     if (!XmaxLogger.isEnabled(XmaxLoggerOption.performance)) return;
-    final lines = <String>['性能告警 (Performance Alert)'];
+    final lines = <String>[
+      '性能告警 (Performance Alert)',
+      '├─ reason：${reason.name}',
+    ];
     final state = performanceAlarmName(reason);
     if (data.width > 0 && data.height > 0 && data.frameRate > 0) {
       lines

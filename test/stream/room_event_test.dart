@@ -1,6 +1,8 @@
 import 'dart:convert';
+import 'dart:ui';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:xmax_sdk/src/foundation/runtime/RuntimeInfo.dart';
 import 'package:xmax_sdk/src/service/realtime/RealtimeContext.dart';
 import 'package:xmax_sdk/src/service/realtime/RealtimePoint.dart';
 import 'package:xmax_sdk/src/service/realtime/RealtimeVideoFormat.dart';
@@ -32,7 +34,53 @@ void main() {
       },
       'user_id': 'user-1',
       'uid': 'task-1',
+      'runtime': RuntimeInfo.current.toJson(),
     });
+  });
+
+  test('start and condition change encode optional target size', () {
+    for (final message in <String>[
+      RoomEvent.start(
+        userID: 'user-1',
+        taskID: 'task-1',
+        videoFormat: format,
+        targetSize: const Size(1920, 1080),
+        context: RealtimeContext(prompt: 'start'),
+      ),
+      RoomEvent.changeCondition(
+        userID: 'user-1',
+        taskID: 'task-1',
+        videoFormat: format,
+        targetSize: const Size(1920, 1080),
+        context: RealtimeContext(prompt: 'change'),
+      ),
+    ]) {
+      final event = jsonDecode(message) as Map<String, dynamic>;
+      final params = event['params'] as Map<String, dynamic>;
+      expect(params['target_size'], <int>[1920, 1080]);
+      expect(event['runtime'], RuntimeInfo.current.toJson());
+    }
+  });
+
+  test('change target size matches iOS room signaling contract', () {
+    expect(
+      jsonDecode(
+        RoomEvent.changeTargetSize(
+          userID: 'user-1',
+          taskID: 'task-1',
+          targetSize: const Size(1280, 720),
+        ),
+      ),
+      <String, Object?>{
+        'event': 'change_target_size',
+        'params': <String, Object?>{
+          'target_size': <int>[1280, 720],
+        },
+        'user_id': 'user-1',
+        'uid': 'task-1',
+        'runtime': RuntimeInfo.current.toJson(),
+      },
+    );
   });
 
   test('change condition omits a removed reference like iOS', () {
@@ -73,15 +121,32 @@ void main() {
         ],
         'user_id': 'user-1',
         'uid': 'task-1',
+        'runtime': RuntimeInfo.current.toJson(),
       },
     );
     expect(
       jsonDecode(RoomEvent.stop(userID: 'user-1', taskID: 'task-1')),
-      <String, Object?>{'event': 'stop', 'user_id': 'user-1', 'uid': 'task-1'},
+      <String, Object?>{
+        'event': 'stop',
+        'user_id': 'user-1',
+        'uid': 'task-1',
+        'runtime': RuntimeInfo.current.toJson(),
+      },
     );
     expect(jsonDecode(RoomEvent.heartbeat(userID: 'user-1')), <String, Object?>{
       'event': 'heartbeat',
       'user_id': 'user-1',
+      'runtime': RuntimeInfo.current.toJson(),
     });
+  });
+
+  test('runtime carries the native SDK field names', () {
+    expect(RuntimeInfo.current.toJson().keys.toSet(), <String>{
+      'platform',
+      'os_version',
+      'sdk_version',
+      'device_model',
+    });
+    expect(RuntimeInfo.current.toJson()['sdk_version'], '1.0.1');
   });
 }

@@ -1,9 +1,11 @@
 import 'dart:convert';
+import 'dart:ui';
 
 import '../../foundation/errors/XmaxError.dart';
 import '../../foundation/logging/XmaxLogger.dart';
 import '../../foundation/rtc/RtcManaging.dart';
 import '../../foundation/rtc/RtcModels.dart';
+import '../../foundation/runtime/RuntimeInfo.dart';
 import '../../service/realtime/RealtimeContext.dart';
 import '../../service/realtime/RealtimePoint.dart';
 import '../../service/realtime/RealtimeSession.dart';
@@ -40,6 +42,11 @@ final class RoomController implements RoomControlling {
     _heartbeat.stop();
 
     try {
+      // RoomEvent is synchronous; hydrate its shared runtime snapshot before
+      // the room can send a generation signal or start its heartbeat.
+      await RuntimeInfo.resolve();
+      ensureActive();
+
       await _rtcManager.joinRoom(
         configuration: RoomJoinConfiguration(
           roomID: connection.roomID,
@@ -75,12 +82,14 @@ final class RoomController implements RoomControlling {
     required String taskID,
     required RealtimeVideoFormat videoFormat,
     required RealtimeContext context,
+    Size? targetSize,
   }) => _send(
     RoomEvent.start(
       userID: _requireUserID(),
       taskID: taskID,
       videoFormat: videoFormat,
       context: context,
+      targetSize: targetSize,
     ),
   );
 
@@ -89,14 +98,32 @@ final class RoomController implements RoomControlling {
     required String taskID,
     required RealtimeVideoFormat videoFormat,
     required RealtimeContext context,
+    Size? targetSize,
   }) => _send(
     RoomEvent.changeCondition(
       userID: _requireUserID(),
       taskID: taskID,
       videoFormat: videoFormat,
       context: context,
+      targetSize: targetSize,
     ),
   );
+
+  @override
+  Future<void> changeTargetSize({
+    required String taskID,
+    required Size targetSize,
+    required void Function() ensureActive,
+  }) {
+    ensureActive();
+    return _send(
+      RoomEvent.changeTargetSize(
+        userID: _requireUserID(),
+        taskID: taskID,
+        targetSize: targetSize,
+      ),
+    );
+  }
 
   @override
   Future<void> stopGeneration({required String taskID}) async {
@@ -139,7 +166,12 @@ final class RoomController implements RoomControlling {
   }
 
   Future<void> _send(String message) async {
-    await _rtcManager.sendRoomMessage(message);
+    try {
+      await _rtcManager.sendRoomMessage(message);
+    } catch (error) {
+      throw XmaxError.from(error);
+    }
+
     XmaxLogger.debug(
       category: XmaxLoggerCategory.room,
       message: _formatSignalLog(message),

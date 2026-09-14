@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:math';
 
 import '../../foundation/errors/XmaxError.dart';
@@ -145,6 +146,9 @@ final class XmaxRealtimeGenerationManager {
       if (remaining > 2) output.write(alphabet[value & 63]);
     }
 
+    // Identify the Flutter client without changing the random task identity.
+    // Frame-level metadata such as `index` may be appended to this query later.
+    output.write('?os=flutter-${Platform.operatingSystem}');
     return output.toString();
   }
 }

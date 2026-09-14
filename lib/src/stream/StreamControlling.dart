@@ -1,3 +1,5 @@
+import 'dart:ui';
+
 import '../service/realtime/RealtimeContext.dart';
 import '../service/realtime/RealtimeNetworkQuality.dart';
 import '../service/realtime/RealtimePerformanceAlarm.dart';
@@ -37,11 +39,18 @@ abstract interface class StreamControlling {
     required String taskID,
     required RealtimeVideoFormat videoFormat,
     required RealtimeContext context,
+    Size? targetSize,
   });
   Future<void> updateGeneration({
     required String taskID,
     required RealtimeVideoFormat videoFormat,
     required RealtimeContext context,
+    Size? targetSize,
+  });
+  Future<void> changeTargetSize({
+    required String taskID,
+    required Size targetSize,
+    required void Function() ensureActive,
   });
   Future<void> stopGeneration({required String taskID});
   Future<void> sendTracks({

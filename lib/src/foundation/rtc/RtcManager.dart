@@ -8,6 +8,7 @@ import '../../service/realtime/RealtimeNetworkQuality.dart';
 import '../../service/realtime/RealtimePerformanceAlarm.dart';
 import '../../service/realtime/RealtimeVideoFormat.dart';
 import '../errors/XmaxError.dart';
+import '../logging/XmaxLogger.dart';
 import '../media/camera/CameraPosition.dart';
 import 'RtcEngineManager.dart';
 import 'RtcEventListener.dart';
@@ -376,8 +377,37 @@ final class RtcManager implements RtcManaging {
         ),
       );
     },
-    onFirstLocalVideoFrameCaptured: (_, _) {
+    onFirstLocalVideoFrameCaptured: (_, frameInfo) {
+      if (frameInfo.width <= 0 || frameInfo.height <= 0) return;
+      XmaxLogger.debug(
+        category: XmaxLoggerCategory.rtc,
+        message:
+            '本地首帧已采集 (First Local Video Frame Captured)\n'
+            '└─ ${frameInfo.width} × ${frameInfo.height}',
+      );
       _cameraPreviewReadyListener?.call();
+    },
+    onFirstRemoteVideoFrameDecoded: (streamID, info, frameInfo) {
+      if (info.roomId != _roomID || _room == null) return;
+      XmaxLogger.debug(
+        category: XmaxLoggerCategory.rtc,
+        message:
+            '远端首帧已解码 (First Remote Video Frame Decoded)\n'
+            '├─ streamID：$streamID\n'
+            '└─ ${frameInfo.width} × ${frameInfo.height}',
+      );
+    },
+    onFirstRemoteVideoFrameRendered: (streamID, info, _) {
+      if (info.roomId != _roomID || _room == null) return;
+      XmaxLogger.debug(
+        category: XmaxLoggerCategory.rtc,
+        message:
+            '远端首帧已渲染 (First Remote Video Frame Rendered)\n'
+            '└─ streamID：$streamID',
+      );
+      _eventListener?.onFirstRemoteVideoFrameRendered?.call(
+        _remoteStream(streamID, info),
+      );
     },
     onSEIMessageReceived: (streamID, info, Uint8List message) {
       _eventListener?.onSEIMessageReceived?.call(
